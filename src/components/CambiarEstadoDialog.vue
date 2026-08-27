@@ -24,7 +24,11 @@ const comentario = ref('')
 const saving = ref(false)
 
 const estadoOptions = computed(() =>
-  detalleStates.value.map((e) => ({ label: e.nombre, value: e.estado_id })),
+  detalleStates.value.map((e) => ({
+    label: e.nombre,
+    value: e.estado_id,
+    disabled: opcionDisabled({ value: e.estado_id }),
+  })),
 )
 
 const esAprobado = computed(
@@ -35,6 +39,8 @@ const esMismoEstado = computed(
   () => props.item && estadoId.value === props.item.estado_actual_id,
 )
 
+const estadoActualNombre = computed(() => props.item?.estados_catalogo?.nombre ?? '—')
+
 const itemAprobado = computed(() =>
   ['Aprobado', 'En cotización'].includes(props.item?.estados_catalogo?.nombre),
 )
@@ -43,6 +49,10 @@ const estadoEnCompraId = computed(() => estadosStore.byName('En compra')?.estado
 function opcionDisabled(option) {
   return option.value === estadoEnCompraId.value && !itemAprobado.value
 }
+
+const motivoEnCompra = computed(() =>
+  itemAprobado.value ? '' : 'Requiere ítem aprobado.',
+)
 
 watch(
   () => props.visible,
@@ -110,6 +120,16 @@ async function guardar() {
         <div class="item-resumen-mat">{{ item.material || 'Sin descripción' }}</div>
       </div>
 
+      <div class="transicion">
+        <span class="field-label">Estado actual</span>
+        <div class="flex align-items-center gap-2">
+          <EstadoTag :nombre="estadoActualNombre" size="sm" />
+          <i class="pi pi-arrow-right transicion-flecha" aria-hidden="true"></i>
+          <EstadoTag v-if="estadoId" :nombre="estadosStore.byId(estadoId)?.nombre" size="sm" />
+          <span v-else class="transicion-placeholder">nuevo estado</span>
+        </div>
+      </div>
+
       <div class="flex flex-column gap-2">
         <label class="field-label">Nuevo estado</label>
         <Select
@@ -120,6 +140,9 @@ async function guardar() {
           :option-disabled="opcionDisabled"
           fluid
         />
+        <small v-if="estadoEnCompraId && !itemAprobado" style="color: var(--text-muted)">
+          "En compra" requiere que el ítem esté aprobado.
+        </small>
       </div>
 
       <div v-if="esAprobado" class="flex flex-column gap-2">
@@ -144,7 +167,7 @@ async function guardar() {
 
     <template #footer>
       <Button label="Cancelar" text severity="secondary" :disabled="saving" @click="emit('update:visible', false)" />
-      <Button label="Guardar" icon="pi pi-check" :loading="saving" :disabled="!estadoId || esMismoEstado" @click="guardar" />
+      <Button label="Aplicar estado" icon="pi pi-check" :loading="saving" :disabled="!estadoId || esMismoEstado" @click="guardar" />
     </template>
   </Dialog>
 </template>
@@ -156,6 +179,27 @@ async function guardar() {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);
+}
+
+.transicion {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #f7f9fb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.transicion-flecha {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.transicion-placeholder {
+  font-size: 12px;
+  color: #b3c0cd;
+  font-style: italic;
 }
 
 .item-resumen {

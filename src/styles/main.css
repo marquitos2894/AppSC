@@ -342,6 +342,20 @@ body {
   height: 6px;
 }
 
+.estado-tag--clickable {
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.estado-tag--clickable:hover {
+  filter: brightness(0.93);
+}
+
+.estado-tag--locked {
+  cursor: default;
+  opacity: 0.92;
+}
+
 /* ----------------------------------------------------------------------------
    EstadoStepper — línea de progreso con bifurcación de decisión
    ---------------------------------------------------------------------------- */
@@ -912,6 +926,11 @@ body {
 
 .p-drawer {
   box-shadow: -12px 0 40px rgba(19, 28, 38, 0.14);
+}
+
+/* Máscara (backdrop) del Drawer en modo claro: velo sutil en lugar de oscuro */
+.p-drawer-mask {
+  background: rgba(19, 28, 38, 0.08) !important;
 }
 
 .p-drawer .p-drawer-header {

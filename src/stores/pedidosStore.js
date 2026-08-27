@@ -17,7 +17,10 @@ export const usePedidosStore = defineStore('pedidos', {
         .from('vw_pedidos_resumen')
         .select('*', { count: 'exact' })
       if (this.filtroEstado) query = query.eq('estado_actual', this.filtroEstado)
-      if (this.busqueda) query = query.ilike('motivo', `%${this.busqueda}%`)
+      if (this.busqueda) {
+        const term = this.busqueda.replace(/^sc/i, '')
+        query = query.ilike('nro_sc', `%${term}%`)
+      }
       const { data, error, count } = await query
         .order('fecha_emision', { ascending: false })
         .order('pedido_id', { ascending: false })

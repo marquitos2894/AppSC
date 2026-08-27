@@ -42,6 +42,10 @@ async function salir() {
             <i class="pi pi-inbox"></i>
             Pedidos
           </RouterLink>
+          <RouterLink to="/items" class="app-nav-item">
+            <i class="pi pi-list"></i>
+            Ítems
+          </RouterLink>
         </nav>
 
         <div class="app-rail-foot">

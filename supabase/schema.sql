@@ -69,10 +69,16 @@ create table if not exists detalle_ingreso (
   ingreso_id bigserial primary key,
   detalle_id bigint not null references detalle_pedido(detalle_id),
   cantidad   numeric(12,2) not null,
-  fecha      timestamptz not null default now(),
+  documento  varchar(25),          -- referencia de documento (guía/factura)
+  fecha      date not null default current_date,
   timestamp  timestamptz not null default now(),
   active     boolean not null default true
 );
+
+alter table detalle_ingreso add column if not exists documento varchar(25);
+
+-- fecha pasa de timestamp a date (solo el día de la entrega)
+alter table detalle_ingreso alter column fecha type date using fecha::date;
 
 -- Historial de estados del detalle
 create table if not exists detalle_historial_estados (
@@ -308,6 +314,69 @@ begin
 end;
 $$;
 
+-- Revierte retroactivamente la promoción a "Atendido" cuando el ítem queda sin
+-- ingresos (sum(cantidad)=0): lo devuelve al estado anterior (desde su historial)
+-- y desactiva la fila de historial auto-generada "Atendido por ingresos".
+create or replace function fn_revertir_atendido(p_detalle_id bigint)
+returns void
+language plpgsql
+as $$
+declare
+  v_estado_atendido int;
+  v_estado_actual   int;
+  v_total           numeric(12,2);
+  v_hist_atendido   bigint;
+  v_estado_prev     int;
+begin
+  select estado_id into v_estado_atendido from estados_catalogo where nombre = 'Atendido';
+  select estado_actual_id into v_estado_actual from detalle_pedido where detalle_id = p_detalle_id;
+
+  if v_estado_actual is distinct from v_estado_atendido then
+    return; -- solo aplica si el ítem está "Atendido"
+  end if;
+
+  select coalesce(sum(cantidad), 0) into v_total
+  from detalle_ingreso
+  where detalle_id = p_detalle_id and active;
+
+  if v_total > 0 then
+    return; -- aún quedan ingresos, sigue "Atendido"
+  end if;
+
+  -- Fila de historial "Atendido" más reciente (auto-generada por ingresos)
+  select h.historial_id into v_hist_atendido
+  from detalle_historial_estados h
+  join estados_catalogo ec on ec.estado_id = h.estado_id
+  where h.detalle_id = p_detalle_id and h.active and ec.nombre = 'Atendido'
+  order by h.fecha desc, h.historial_id desc
+  limit 1;
+
+  -- Estado anterior al "Atendido" (última fila no-Atendido del historial)
+  select ec.estado_id into v_estado_prev
+  from detalle_historial_estados h
+  join estados_catalogo ec on ec.estado_id = h.estado_id
+  where h.detalle_id = p_detalle_id and h.active and ec.nombre <> 'Atendido'
+  order by h.fecha desc, h.historial_id desc
+  limit 1;
+
+  if v_estado_prev is null then
+    select estado_id into v_estado_prev from estados_catalogo where nombre = 'En compra';
+  end if;
+
+  -- Devuelve el ítem al estado anterior sin duplicar historial
+  perform set_config('app.skip_detalle_historial', '1', true);
+  perform set_config('app.allow_detalle_cambio', '1', true);
+  update detalle_pedido set estado_actual_id = v_estado_prev where detalle_id = p_detalle_id;
+  perform set_config('app.allow_detalle_cambio', '0', true);
+  perform set_config('app.skip_detalle_historial', '0', true);
+
+  -- Elimina (soft-delete) la fila "Atendido por ingresos"
+  if v_hist_atendido is not null then
+    update detalle_historial_estados set active = false where historial_id = v_hist_atendido;
+  end if;
+end;
+$$;
+
 -- ----------------------------------------------------------------------------
 -- 4. Triggers
 -- ----------------------------------------------------------------------------
@@ -377,12 +446,19 @@ for each row execute function trg_detalle_pedido_aiud();
 --   * Bloquea asignar "Atendido" manualmente (solo vía ingresos).
 --   * "En compra" exige que el ítem ya haya sido aprobado.
 --   * Al pasar a Rechazado/Observado, anula la cantidad aprobada.
+--   * "Atendido" no puede cambiarse manualmente (solo vía eliminación de entregas).
 create or replace function trg_detalle_pedido_bu_validaciones()
 returns trigger
 language plpgsql
 as $$
 begin
   if new.estado_actual_id is distinct from old.estado_actual_id then
+    -- Bloqueo: "Atendido" es terminal/derivado y no se cambia manualmente
+    if old.estado_actual_id = (select estado_id from estados_catalogo where nombre = 'Atendido')
+       and nullif(current_setting('app.allow_detalle_cambio', true), '') is null then
+      raise exception 'El ítem está "Atendido" y no puede cambiarse manualmente; elimina las entregas para revertirlo';
+    end if;
+
     -- #3: el pedido debe haber pasado por "En análisis"
     if nullif(current_setting('app.allow_detalle_cambio', true), '') is null then
       if not exists (
@@ -445,8 +521,10 @@ begin
     perform fn_recalcular_detalle_atencion(new.detalle_id, true);
   elsif tg_op = 'UPDATE' then
     perform fn_recalcular_detalle_atencion(new.detalle_id, false);
+    perform fn_revertir_atendido(new.detalle_id);
   elsif tg_op = 'DELETE' then
     perform fn_recalcular_detalle_atencion(old.detalle_id, false);
+    perform fn_revertir_atendido(old.detalle_id);
   end if;
   return coalesce(new, old);
 end;
@@ -457,21 +535,43 @@ create trigger trg_detalle_ingreso_aiud
 after insert or update or delete on detalle_ingreso
 for each row execute function trg_detalle_ingreso_aiud();
 
--- 4.c-bis Ingresos: bloquea registrar ingreso si el ítem no está en fase aprobada.
+-- 4.c-bis Ingresos: valida cantidad de un ingreso.
+--   * En INSERT: el ítem debe estar en fase aprobada.
+--   * En INSERT y UPDATE: la cantidad total no puede superar la aprobada
+--     (en UPDATE excluye la fila que se está editando).
 create or replace function trg_detalle_ingreso_bi_aprobado()
 returns trigger
 language plpgsql
 as $$
 declare
-  v_nombre varchar(50);
+  v_nombre   varchar(50);
+  v_aprobada numeric(12,2);
+  v_atendida numeric(12,2);
+  v_total    numeric(12,2);
 begin
-  select ec.nombre into v_nombre
+  select ec.nombre, d.cantidad_aprobada into v_nombre, v_aprobada
   from detalle_pedido d
   join estados_catalogo ec on ec.estado_id = d.estado_actual_id
   where d.detalle_id = new.detalle_id;
 
-  if v_nombre not in ('Aprobado', 'En cotización', 'En compra') then
-    raise exception 'No se puede registrar ingreso: el ítem no está aprobado';
+  if tg_op = 'INSERT' then
+    if v_nombre not in ('Aprobado', 'En cotización', 'En compra', 'Atendido') then
+      raise exception 'No se puede registrar ingreso: el ítem no está aprobado';
+    end if;
+    select coalesce(sum(cantidad), 0) into v_atendida
+    from detalle_ingreso
+    where detalle_id = new.detalle_id and active;
+    v_total := v_atendida + new.cantidad;
+  else
+    -- UPDATE: excluye la fila editada (permite editar entregas aunque el ítem ya esté Atendido)
+    select coalesce(sum(cantidad), 0) into v_atendida
+    from detalle_ingreso
+    where detalle_id = new.detalle_id and active and ingreso_id <> new.ingreso_id;
+    v_total := v_atendida + new.cantidad;
+  end if;
+
+  if v_total > v_aprobada then
+    raise exception 'La cantidad atendida no puede superar la cantidad aprobada (aprobada=%, ya atendida=%, nuevo=%)', v_aprobada, v_atendida, new.cantidad;
   end if;
 
   return new;
@@ -480,7 +580,7 @@ $$;
 
 drop trigger if exists trg_detalle_ingreso_bi_aprobado on detalle_ingreso;
 create trigger trg_detalle_ingreso_bi_aprobado
-before insert on detalle_ingreso
+before insert or update of cantidad, detalle_id on detalle_ingreso
 for each row execute function trg_detalle_ingreso_bi_aprobado();
 
 -- 4.d Cambio de estado a nivel pedido desde el listado (RPC):
@@ -598,6 +698,27 @@ left join estados_catalogo dec on dec.estado_id = d.estado_actual_id
 where p.active
 group by p.pedido_id, p.fecha_emision, p.motivo, p.grupo_costo, p.nro_sc, p.autorizado, p.estado_atencion, ec.nombre;
 
+-- Vista de ítems (detalle) de todos los pedidos activos, con su N° SC.
+create or replace view vw_items_detalle
+with (security_invoker = true)
+as
+select
+  d.detalle_id,
+  d.pedido_id,
+  p.nro_sc,
+  d.nro_parte,
+  d.material,
+  d.equipo,
+  d.cantidad_solicitada,
+  d.cantidad_aprobada,
+  d.cantidad_atendida,
+  d.estado_atencion,
+  ec.nombre as estado
+from detalle_pedido d
+join pedido p on p.pedido_id = d.pedido_id
+join estados_catalogo ec on ec.estado_id = d.estado_actual_id
+where p.active and d.active;
+
 -- ----------------------------------------------------------------------------
 -- 7. RLS — policies permisivas para authenticated (punto de partida)
 -- ----------------------------------------------------------------------------
@@ -638,3 +759,4 @@ grant select, insert, update, delete on estados_catalogo,
   pedido, detalle_pedido, solicitud_historial_estados,
   detalle_ingreso, detalle_historial_estados to authenticated;
 grant select on vw_pedidos_resumen to authenticated;
+grant select on vw_items_detalle to authenticated;

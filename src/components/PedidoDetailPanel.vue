@@ -26,8 +26,17 @@ function claseAtencion(valor) {
 }
 
 function abrirEstado(item) {
+  if (esAtendido(item)) return
   itemSeleccionado.value = item
   dialogEstado.value = true
+}
+
+function esAtendido(item) {
+  return item?.estados_catalogo?.nombre === 'Atendido'
+}
+
+function clickEstado(item) {
+  if (!esAtendido(item)) abrirEstado(item)
 }
 
 function abrirIngreso(item) {
@@ -84,7 +93,7 @@ function pendiente(item) {
       <template v-else-if="pedido">
         <div class="detalle-header">
           <div class="detalle-id-block">
-            <span class="detalle-id">{{ pedido.pedido_id }}</span>
+            <span class="detalle-id">{{ pedido.nro_sc }}</span>
             <EstadoTag :nombre="estadoPedido" />
           </div>
 
@@ -104,11 +113,6 @@ function pendiente(item) {
           </div>
 
           <div v-if="pedido.motivo" class="detalle-motivo">{{ pedido.motivo }}</div>
-        </div>
-
-        <div class="detalle-section">
-          <h3 class="detalle-section-title">Flujo del pedido</h3>
-          <EstadoStepper :estado-nombre="estadoPedido" />
         </div>
 
         <div class="detalle-section">
@@ -164,7 +168,13 @@ function pendiente(item) {
             <Column header="Estado" style="width: 150px">
               <template #body="{ data }">
                 <div class="flex flex-column gap-1">
-                  <EstadoTag :nombre="data.estados_catalogo?.nombre" size="sm" />
+                  <EstadoTag
+                    :nombre="data.estados_catalogo?.nombre"
+                    size="sm"
+                    v-tooltip.top="esAtendido(data) ? 'No editable (Atendido)' : 'Cambiar estado'"
+                    :class="esAtendido(data) ? 'estado-tag--locked' : 'estado-tag--clickable'"
+                    @click="clickEstado(data)"
+                  />
                   <span
                     v-if="data.estado_atencion"
                     class="atencion-badge"
@@ -176,25 +186,16 @@ function pendiente(item) {
               </template>
             </Column>
 
-            <Column header="" style="width: 130px">
+            <Column header="" style="width: 100px">
               <template #body="{ data }">
                 <div class="item-acciones">
-                  <Button
-                    icon="pi pi-pencil"
-                    text
-                    rounded
-                    size="small"
-                    aria-label="Cambiar estado"
-                    v-tooltip.top="'Cambiar estado'"
-                    @click="abrirEstado(data)"
-                  />
                   <Button
                     icon="pi pi-plus"
                     text
                     rounded
                     size="small"
-                    aria-label="Registrar ingreso"
-                    v-tooltip.top="'Registrar ingreso'"
+                    aria-label="Registrar Atencion"
+                    v-tooltip.top="'Registrar Atencion'"
                     @click="abrirIngreso(data)"
                   />
                   <Button
@@ -222,10 +223,10 @@ function pendiente(item) {
           </DataTable>
         </div>
 
-        <div class="detalle-section">
+        <!--div class="detalle-section">
           <h3 class="detalle-section-title">Historial del pedido</h3>
           <HistorialTimeline :eventos="historialPedido" />
-        </div>
+        </div -->
       </template>
 
       <div v-else class="empty-state">

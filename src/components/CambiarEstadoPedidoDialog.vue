@@ -86,7 +86,7 @@ async function guardar() {
 
       <div class="item-resumen">
         <div class="flex align-items-center gap-2">
-          <span class="cell-id" style="font-size: 14px">{{ pedido.pedido_id }}</span>
+          <span class="cell-id" style="font-size: 14px">{{ pedido.nro_sc }}</span>
           <EstadoTag :nombre="pedido.estado_actual" size="sm" />
         </div>
         <div class="item-resumen-mat" :title="pedido.motivo">

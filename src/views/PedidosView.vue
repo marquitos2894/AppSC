@@ -26,7 +26,7 @@
       <i class="pi pi-search"></i>
       <InputText
         v-model="busqueda"
-        placeholder="Buscar por motivo"
+        placeholder="Buscar por N° SC"
         fluid
         @keydown.enter="buscar"
         @keydown.esc="limpiarBusqueda"

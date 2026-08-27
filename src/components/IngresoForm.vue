@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useDetallePedidoStore } from '@/stores/detallePedidoStore'
 import { useToast } from 'primevue/usetoast'
-import { formatQty } from '@/utils/format'
+import { formatQty, toISODate } from '@/utils/format'
 
 const props = defineProps({
   item: { type: Object, default: null },
@@ -14,27 +14,42 @@ const detalleStore = useDetallePedidoStore()
 const toast = useToast()
 
 const cantidad = ref(0)
+const fecha = ref(new Date())
+const documento = ref('')
 const saving = ref(false)
 
 const aprobada = computed(() => Number(props.item?.cantidad_aprobada ?? 0))
 const atendida = computed(() => Number(props.item?.cantidad_atendida ?? 0))
 const pendiente = computed(() => Math.max(aprobada.value - atendida.value, 0))
 const sinAprobacion = computed(() => aprobada.value <= 0)
-const estadosAprobados = ['Aprobado', 'En cotización', 'En compra']
+const estadosAprobados = ['Aprobado', 'En cotización', 'En compra', 'Atendido']
 const aprobado = computed(() => estadosAprobados.includes(props.item?.estados_catalogo?.nombre))
 
 watch(
   () => props.visible,
   (v) => {
-    if (v && props.item) cantidad.value = pendiente.value
+    if (v && props.item) {
+      cantidad.value = pendiente.value
+      fecha.value = new Date()
+      documento.value = ''
+    }
   },
 )
 
 async function registrar() {
   if (!props.item || !aprobado.value || Number(cantidad.value) <= 0) return
+  if (Number(cantidad.value) > pendiente.value) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Cantidad no válida',
+      detail: `La cantidad no puede superar lo pendiente (${formatQty(pendiente.value)}).`,
+      life: 5000,
+    })
+    return
+  }
   saving.value = true
   try {
-    await detalleStore.registrarIngreso(props.item.detalle_id, cantidad.value)
+    await detalleStore.registrarIngreso(props.item.detalle_id, cantidad.value, toISODate(fecha.value), documento.value)
     toast.add({
       severity: 'success',
       summary: 'Ingreso registrado',
@@ -71,7 +86,7 @@ async function registrar() {
       </Message>
 
       <Message v-if="aprobado && sinAprobacion" severity="warn" :closable="false">
-        El ítem no tiene cantidad aprobada. El ingreso se registrará pero no moverá el estado a Atendido.
+        El ítem no tiene cantidad aprobada. No se puede registrar ingreso.
       </Message>
 
       <div class="resumen-grid">
@@ -90,17 +105,31 @@ async function registrar() {
       </div>
 
       <div class="flex flex-column gap-2">
+        <label class="field-label">Fecha de entrega</label>
+        <DatePicker v-model="fecha" date-format="dd/mm/yy" fluid />
+        <small style="color: var(--text-muted)">
+          Selecciona la fecha del ingreso.
+        </small>
+      </div>
+
+      <div class="flex flex-column gap-2">
+        <label class="field-label">Documento referencia</label>
+        <InputText v-model="documento" maxlength="25" placeholder="Guía / factura" class="mono" fluid />
+      </div>
+
+      <div class="flex flex-column gap-2">
         <label class="field-label">Cantidad a ingresar</label>
         <InputNumber
           v-model="cantidad"
           mode="decimal"
           :min="0"
+          :max="pendiente"
           :max-fraction-digits="2"
           fluid
           autofocus
         />
         <small style="color: var(--text-muted)">
-          Cada entrega parcial queda registrada como una fila independiente.
+          Máximo a ingresar: {{ formatQty(pendiente) }} (lo que queda pendiente).
         </small>
       </div>
     </div>

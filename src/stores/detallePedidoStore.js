@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { supabase } from '@/api/supabaseClient'
+import { usePedidosStore } from '@/stores/pedidosStore'
 
 export const useDetallePedidoStore = defineStore('detallePedido', {
   state: () => ({
@@ -93,8 +94,8 @@ export const useDetallePedidoStore = defineStore('detallePedido', {
         .select('*, estados_catalogo:estado_id(nombre)')
         .eq('detalle_id', detalleId)
         .eq('active', true)
-        .order('fecha', { ascending: true })
-        .order('historial_id', { ascending: true })
+        .order('fecha', { ascending: false })
+        .order('historial_id', { ascending: false })
       this.loadingMapa[`hist-${detalleId}`] = false
       if (error) throw error
       this.historialPorItem[detalleId] = data
@@ -120,7 +121,7 @@ export const useDetallePedidoStore = defineStore('detallePedido', {
         .eq('detalle_id', detalleId)
       if (error) throw error
       if (comentario) await this._anotarComentario(detalleId, comentario)
-      await this.cargar(this.pedidoId)
+      await this._recargarTodo()
     },
 
     async aprobarItem(detalleId, estadoId, cantidadAprobada, comentario) {
@@ -130,15 +131,33 @@ export const useDetallePedidoStore = defineStore('detallePedido', {
         .eq('detalle_id', detalleId)
       if (error) throw error
       if (comentario) await this._anotarComentario(detalleId, comentario)
-      await this.cargar(this.pedidoId)
+      await this._recargarTodo()
     },
 
-    async registrarIngreso(detalleId, cantidad) {
+    async registrarIngreso(detalleId, cantidad, fecha, documento) {
       const { error } = await supabase
         .from('detalle_ingreso')
-        .insert({ detalle_id: detalleId, cantidad })
+        .insert({ detalle_id: detalleId, cantidad, fecha: fecha ?? null, documento: documento || null })
       if (error) throw error
-      await this.cargar(this.pedidoId)
+      await this._recargarTodo()
+    },
+
+    async editarIngreso(ingresoId, { cantidad, fecha, documento }) {
+      const { error } = await supabase
+        .from('detalle_ingreso')
+        .update({ cantidad, fecha, documento: documento || null })
+        .eq('ingreso_id', ingresoId)
+      if (error) throw error
+      await this._recargarTodo()
+    },
+
+    async eliminarIngreso(ingresoId) {
+      const { error } = await supabase
+        .from('detalle_ingreso')
+        .update({ active: false })
+        .eq('ingreso_id', ingresoId)
+      if (error) throw error
+      await this._recargarTodo()
     },
 
     async eliminarItem(detalleId) {
@@ -147,7 +166,7 @@ export const useDetallePedidoStore = defineStore('detallePedido', {
         .update({ active: false })
         .eq('detalle_id', detalleId)
       if (error) throw error
-      await this.cargar(this.pedidoId)
+      await this._recargarTodo()
     },
 
     async _anotarComentario(detalleId, comentario) {
@@ -164,6 +183,15 @@ export const useDetallePedidoStore = defineStore('detallePedido', {
           .from('detalle_historial_estados')
           .update({ comentario })
           .eq('historial_id', ultimo.historial_id)
+      }
+    },
+
+    async _recargarTodo() {
+      await this.cargar(this.pedidoId)
+      try {
+        await usePedidosStore().fetchPedidos()
+      } catch (e) {
+        /* el detalle ya se recargó; el listado se reintenta en la próxima transacción */
       }
     },
   },

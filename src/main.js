@@ -36,7 +36,10 @@ const app = createApp(App)
 
 app.use(createPinia())
 app.use(PrimeVue, {
-  theme: { preset: AppPreset },
+  theme: {
+    preset: AppPreset,
+    options: { darkModeSelector: 'none' },
+  },
   ripple: true,
 })
 app.use(ToastService)
