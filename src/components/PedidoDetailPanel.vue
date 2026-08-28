@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia'
 import { useDetallePedidoStore } from '@/stores/detallePedidoStore'
 import { useConfirm } from 'primevue/useconfirm'
 import { useToast } from 'primevue/usetoast'
-import { formatQty, formatDate } from '@/utils/format'
+import { formatQty, formatDate, toLocalDate, toISODate } from '@/utils/format'
 
 const detalleStore = useDetallePedidoStore()
 const confirm = useConfirm()
@@ -71,6 +71,15 @@ function confirmarEliminarItem(item) {
 function pendiente(item) {
   return detalleStore.pendiente(item)
 }
+
+async function guardarFechaAprox(item, d) {
+  try {
+    await detalleStore.actualizarFechaAprox(item.detalle_id, toISODate(d))
+    toast.add({ severity: 'success', summary: 'Fecha aprox. actualizada', life: 3000 })
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Error', detail: e.message, life: 6000 })
+  }
+}
 </script>
 
 <template>
@@ -78,7 +87,7 @@ function pendiente(item) {
     v-model:visible="visible"
     position="right"
     header="Detalle del pedido"
-    style="width: min(820px, 100vw)"
+    style="width: min(1200px, 100vw)"
     @hide="detalleStore.cerrar()"
   >
     <div class="detalle-sidebar">
@@ -136,6 +145,8 @@ function pendiente(item) {
               </template>
             </Column>
 
+
+
             <Column header="Solic." style="width: 70px">
               <template #body="{ data }">
                 <span class="cell-num">{{ formatQty(data.cantidad_solicitada) }}</span>
@@ -182,6 +193,30 @@ function pendiente(item) {
                   >
                     {{ data.estado_atencion }}
                   </span>
+                </div>
+              </template>
+            </Column>
+            <Column header="F. aprox." style="width: 150px">
+              <template #body="{ data }">
+                <div class="flex align-items-center gap-1">
+                  <DatePicker
+                    :model-value="toLocalDate(data.fecha_aprox_atencion)"
+                    date-format="dd/mm/yy"
+                    show-icon
+                    size="small"
+                    @date-select="(d) => guardarFechaAprox(data, d)"
+                  />
+                  <Button
+                    v-if="data.fecha_aprox_atencion"
+                    icon="pi pi-times"
+                    text
+                    rounded
+                    size="small"
+                    severity="secondary"
+                    aria-label="Quitar fecha"
+                    v-tooltip.top="'Quitar fecha'"
+                    @click="guardarFechaAprox(data, null)"
+                  />
                 </div>
               </template>
             </Column>

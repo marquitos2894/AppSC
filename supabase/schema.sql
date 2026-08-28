@@ -47,11 +47,14 @@ create table if not exists detalle_pedido (
   cantidad_aprobada   numeric(12,2) not null default 0,
   cantidad_atendida   numeric(12,2) not null default 0,
   equipo              varchar(100),
+  fecha_aprox_atencion date,
   estado_actual_id    int not null references estados_catalogo(estado_id),
   estado_atencion     varchar(30),
   timestamp           timestamptz not null default now(),
   active              boolean not null default true
 );
+
+alter table detalle_pedido add column if not exists fecha_aprox_atencion date;
 
 -- Historial de estados del encabezado
 create table if not exists solicitud_historial_estados (
@@ -699,6 +702,8 @@ where p.active
 group by p.pedido_id, p.fecha_emision, p.motivo, p.grupo_costo, p.nro_sc, p.autorizado, p.estado_atencion, ec.nombre;
 
 -- Vista de ítems (detalle) de todos los pedidos activos, con su N° SC.
+drop view if exists vw_items_detalle;
+
 create or replace view vw_items_detalle
 with (security_invoker = true)
 as
@@ -709,6 +714,7 @@ select
   d.nro_parte,
   d.material,
   d.equipo,
+  d.fecha_aprox_atencion,
   d.cantidad_solicitada,
   d.cantidad_aprobada,
   d.cantidad_atendida,

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["AGENTS.md"],
+  "mcp": {
+    "servers": {
+      "obsidian": {
+        "type": "local",
+        "command": [
+          "C:\\Tools\\obsidian-mcp\\obsidian-mcp.exe"
+        ],
+        "environment": {
+          "OBSIDIAN_API_KEY": "4dc83f56db9cb8f7dbde955501a4fcd58363feca5e12be06eb546764b0e64d77"
+        }
+      }
+    }
+  }
+
+
+}

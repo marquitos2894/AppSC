@@ -1,38 +1,56 @@
 # AGENTS.md
 
-App Vue 3 SPA de gestión de pedidos + backend Supabase (Postgres/RLS/triggers).
+App Vue 3 SPA de gestión de pedidos + backend Supabase (Postgres/RLS/triggers/Edge Functions). Repo git → GitHub `marquitos2894/AppSC` (rama `main`).
 
 ## Comandos
 - `npm run dev` — Vite (puerto 5173)
 - `npm run build` — **única verificación disponible** (no hay lint/typecheck/test)
 - `npm run preview` — servir build
-
-Sin framework de tests configurado. No es repo git (sin `.git`).
+- **Supabase se opera por MCP** (`supabase_apply_migration`, `supabase_execute_sql`, `supabase_deploy_edge_function`). No hay CLI local (`supabase`/`deno` no instalados).
 
 ## Stack y convenciones
-- **JavaScript puro, sin TypeScript.** `<script setup>` Composition API.
-- **PrimeVue fijado a v4.3.9 a propósito. NO subir a v5** (requiere licencia PrimeUI comercial y renombra componentes). Usar nombres v4 nuevos: `Select` (no Dropdown), `DatePicker` (no Calendar), `Drawer` (no Sidebar). Los viejos están deprecados y emiten warning.
-- Auto-import de componentes PrimeVue (unplugin-vue-components + resolver en vite.config.js): componentes del template no se importan. **Composables sí se importan explícitos**: `useToast` de `primevue/usetoast`, `useConfirm` de `primevue/useconfirm`. Servicios `ToastService`/`ConfirmationService` ya registrados en `src/main.js`.
-- Alias `@` → `src` (vite.config.js).
-- Estados de color en `src/stores/estadosStore.js` (`ESTADO_COLORS`) — fuente única para `EstadoTag`/`EstadoStepper`. Tokens de diseño en `src/styles/main.css` (`--ink-900`, etc.). Preset Aura custom en `main.js` (definePreset).
+- **JavaScript puro, sin TypeScript.** `<script setup>` Composition API. (Única excepción: la Edge Function `supabase/functions/leer-pdf/index.ts` es TS/Deno.)
+- **PrimeVue fijado a v4.3.9 a propósito. NO subir a v5** (requiere licencia PrimeUI comercial y renombra componentes). Usar nombres v4: `Select` (no Dropdown), `DatePicker` (no Calendar), `Drawer` (no Sidebar).
+- Auto-import de componentes PrimeVue (unplugin-vue-components en vite.config.js): los del template no se importan. **Composables sí explícitos**: `useToast` de `primevue/usetoast`, `useConfirm` de `primevue/useconfirm` (servicios registrados en `src/main.js`).
+- Alias `@` → `src`.
+- **Tema claro forzado**: `main.js` usa `options: { darkModeSelector: 'none' }` (con el SO en oscuro, PrimeVue se veía dark). Rail lateral y login quedan oscuros a propósito.
+- Colores de estado en `src/stores/estadosStore.js` (`ESTADO_COLORS`); tokens en `src/styles/main.css`; preset Aura custom en `main.js`.
 
 ## Backend (Supabase)
-- `supabase/schema.sql` = todo el esquema (tablas, seed, funciones, triggers, vista, RLS). **Idempotente**: se puede re-ejecutar entero en el SQL Editor.
-- **La lógica de negocio vive en la BD** (triggers): estado del encabezado se recalcula de los ítems; `cantidad_atendida`/`estado_atencion` se recalculan por ingreso. El frontend solo lee/escribe — nunca reimplementar en JS.
-- Cambio de estado a nivel pedido (desde el listado) vía RPC `fn_cambiar_estado_pedido`: registra en `solicitud_historial_estados` y propaga a todos los ítems activos con doble registro en `detalle_historial_estados` (fecha y comentario manuales).
-- Estados: seed con ids fijos 1–10 pero **resolver siempre por nombre** vía `estadosStore.byName`/`byId`; no hardcodear ids.
-- Soft delete en todas las tablas (`active`); las queries filtran `active=true`.
-- Vista de listado: `vw_pedidos_resumen` (PostgREST la expone como tabla).
+- `supabase/schema.sql` = todo el esquema (tablas, seed, funciones, triggers, vistas, RLS). **Idempotente**: re-ejecutable entero en el SQL Editor.
+- **La lógica de negocio vive en la BD** (triggers/RPC). El frontend solo lee/escribe — nunca reimplementar en JS.
+- Estados: ids fijos 1–10; **resolver siempre por nombre** (`estadosStore.byName`/`byId`), no hardcodear ids. Jerarquía: `Registrado 1, Confirmado 2, En análisis 3, En cotización 4, Aprobado 5, En compra 6, Atendido 7`. `estados_catalogo.ambito` ∈ `pedido|detalle|auto` (filtra selects vía `pedidoStates`/`detalleStates`).
+- Encabezado del pedido = **mayor `orden`** entre ítems no-excepción (recalculado por triggers). `Atendido` es terminal/derivado: se auto-asigna si `cantidad_atendida > 0` (y `aprobada > 0`) y **no se cambia manualmente**; solo se revierte eliminando todas las entregas (`fn_revertir_atendido`).
+- Reglas de ítems (triggers): ingreso solo en `Aprobado/En cotización/En compra/Atendido` y `sum(ingresos) ≤ cantidad_aprobada` (INSERT y UPDATE excluyendo la fila editada); pasar a `Rechazado/Observado` pone `cantidad_aprobada = 0`; cambiar detalle exige que el pedido ya registró `En análisis`; el pedido no se edita manualmente una vez registró `En análisis`; no re-registrar el estado actual.
+- `pedido.estado_atencion` = `PENDIENTE|PARCIAL|COMPLETO` (por `fn_recalcular_pedido_atencion`); badge "Pendiente/Parcial/Completo" solo en el listado.
+- `detalle_ingreso.fecha` es **`date`** (no timestamp); columna `documento varchar(25)`.
+- Vistas: `vw_pedidos_resumen` (listado) y `vw_items_detalle` (ítems con `nro_sc`, para la página `/items`).
+
+## Edge Function `leer-pdf`
+- Local en `supabase/functions/leer-pdf/` (Deno, `@supabase/server`, `unpdf`); config en `supabase/config.toml` (`verify_jwt = false`).
+- Flujo: POST `{ path }` → `supabaseAdmin.storage.from('Documentos').download(path)` → `extractText(bytes, { mergePages: true })` → **borra el archivo** (`remove`) → parsea cabecera + tabla de ítems → JSON. Auth `auth: "user"`.
+- **Desplegar/cambiar vía MCP** `supabase_deploy_edge_function` (`name=leer-pdf`, `verify_jwt=false`, `import_map_path="deno.json"`, `files` = `index.ts` + `deno.json`). El frontend la llama con `supabase.functions.invoke('leer-pdf', { body: { path } })`.
+- Parseo de ítems: línea ancla `^(\d+)\s+(\S+)\s+(\S+)\s+(.+?)\s+(\d+\.?\d*)\s+(\d+\.?\d*)\s+(\S+)$`; columnas `Nº | Código ERP | Nro. Parte | Material | Solic. | Aprob. | Unidad | …`. `nro_parte` = `m[3]`; `cantidad_solicitada` = la "Cantidad Aprobada" del PDF; `equipo` = código corto con guion (`[A-Z]{1,6}-\d{1,4}`) en las líneas de continuación.
+
+## Storage
+- Bucket **"Documentos"** (privado); políticas `documentos_insert`/`documentos_select` para `authenticated` (se crean vía SQL sobre `storage.objects`).
+- Subida desde `PedidoFormDialog`: `supabase.storage.from('Documentos').upload(\`${nro_sc}/${file.name}\`, file)` → ruta `Documentos/{nro_sc}/{nombre}.pdf`. No se guarda referencia en BD ni preview. Acceso a privados vía URL firmada (`createSignedUrl`).
 
 ## Auth
-- Sesión obligatoria de Supabase Auth (email/password, sin auto-registro). RLS es permisiva solo para `authenticated`.
-- `authStore.init()` se llama antes de `mount` en `src/main.js` (evita flash de redirect). Guard en `src/router/index.js`: sin sesión → `/login`.
-- Env: `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` en `.env`. `isConfigured` en `src/api/supabaseClient.js`; sin config la app muestra warning y no consulta.
-- Para probar contra Supabase real, crear usuarios en Dashboard → Authentication → Users.
+- Sesión obligatoria (email/password, sin auto-registro); RLS permisiva solo para `authenticated`.
+- `authStore.init()` antes de `mount` en `src/main.js` (evita flash); guard en `src/router/index.js`.
+- Env en `.env`: `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` (**publishable** `sb_publishable_...`). Proyecto remoto `https://qhsizmayuhnlvcjcomlx.supabase.co`.
+- `isConfigured` en `src/api/supabaseClient.js` (sin config, la app muestra warning).
+
+## Frontend — notas
+- `nroSc` es `InputNumber` → **pierde ceros a la izquierda** (`001040` → `1040`), aceptado.
+- Búsqueda del listado filtra por `nro_sc` (quita prefijo "SC"). Página `/items` (Ítems) filtra por material/nro parte/nro_sc/estado.
+- Mutaciones del detalle refrescan el listado (`detallePedidoStore._recargarTodo` → `pedidosStore.fetchPedidos`).
+- Clic en el `EstadoTag` del ítem abre "Cambiar estado" (no hay lápiz); bloqueado si está "Atendido".
 
 ## Gotchas
-- `DataTable @row-click` recibe `{ originalEvent, data, index }` → usar `event.data.pedido_id` (no `row.pedido_id`).
+- `DataTable @row-click` recibe `{ originalEvent, data, index }` → usar `event.data.pedido_id`.
 - `Drawer`/`Dialog` usan `v-model:visible`; con estado de store usar `storeToRefs`.
-- Comentarios de cambio de estado: el trigger inserta la fila de historial; la app adjunta el comentario editando la fila más reciente (`_anotarComentario` en detallePedidoStore).
-- `Password` de PrimeVue: usar prop `input-id` para el input interno (con `id` el atributo cae en el div raíz).
-- Skills locales disponibles en `.agents/skills/` (primevue, frontend-design, caveman).
+- Comentarios de cambio de estado: la app adjunta el comentario editando la fila más reciente (`_anotarComentario`).
+- `Password` de PrimeVue: usar prop `input-id` (con `id` cae en el div raíz).
+- Skills locales en `.agents/skills/` (primevue, frontend-design, caveman, impeccable, supabase-server).

@@ -90,7 +90,7 @@
         :rows-per-page-options="[15, 30, 60]"
         :always-show-paginator="false"
         :total-records="total"
-        table-style="min-width: 900px"
+        table-style="min-width: 1000px"
         @sort="() => {}"
       >
         <Column header="N° SC" field="nro_sc" style="width: 100px" sortable>
@@ -108,6 +108,7 @@
             <span style="font-size: 12.5px">{{ data.material || '—' }}</span>
           </template>
         </Column>
+
         <Column header="Equipo" field="equipo" style="min-width: 120px" sortable>
           <template #body="{ data }">
             <span style="font-size: 12.5px">{{ data.equipo || '—' }}</span>
@@ -131,6 +132,11 @@
         <Column header="Estado" field="estado" style="width: 150px" sortable>
           <template #body="{ data }">
             <EstadoTag :nombre="data.estado" size="sm" />
+          </template>
+        </Column>
+        <Column header="F. aprox." field="fecha_aprox_atencion" style="width: 110px" sortable>
+          <template #body="{ data }">
+            <span class="mono" style="font-size: 12px">{{ formatDate(data.fecha_aprox_atencion) }}</span>
           </template>
         </Column>
         <Column header="Pend." field="Acciones" style="width: 80px" sortable>
@@ -159,7 +165,7 @@ import { isConfigured } from '@/api/supabaseClient'
 import { useItemsStore } from '@/stores/itemsStore'
 import { useEstadosStore } from '@/stores/estadosStore'
 import { useToast } from 'primevue/usetoast'
-import { formatQty } from '@/utils/format'
+import { formatQty, formatDate } from '@/utils/format'
 
 const itemsStore = useItemsStore()
 const estadosStore = useEstadosStore()

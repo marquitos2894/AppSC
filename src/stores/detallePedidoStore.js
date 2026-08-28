@@ -169,6 +169,15 @@ export const useDetallePedidoStore = defineStore('detallePedido', {
       await this._recargarTodo()
     },
 
+    async actualizarFechaAprox(detalleId, fecha) {
+      const { error } = await supabase
+        .from('detalle_pedido')
+        .update({ fecha_aprox_atencion: fecha })
+        .eq('detalle_id', detalleId)
+      if (error) throw error
+      await this._recargarTodo()
+    },
+
     async _anotarComentario(detalleId, comentario) {
       const { data: ultimo } = await supabase
         .from('detalle_historial_estados')

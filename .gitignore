@@ -31,3 +31,6 @@ dist-ssr
 # Datos de muestra / temporales de Office
 registro ejemplo.xlsx
 ~$*.xlsx
+
+# Notas personales (vault de Obsidian)
+vault/

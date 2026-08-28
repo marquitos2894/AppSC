@@ -4,7 +4,8 @@ import { storeToRefs } from 'pinia'
 import { useDetallePedidoStore } from '@/stores/detallePedidoStore'
 import { useConfirm } from 'primevue/useconfirm'
 import { useToast } from 'primevue/usetoast'
-import { formatQty, formatDate, toISODate } from '@/utils/format'
+import { formatQty, formatDate, toISODate, toLocalDate } from '@/utils/format'
+
 
 const props = defineProps({
   item: { type: Object, default: null },
@@ -46,6 +47,8 @@ watch(
       }
     }
   },
+
+  console.log(ingresosPorItem)
 )
 
 function limiteFila(ing) {
@@ -57,7 +60,7 @@ function limiteFila(ing) {
 function activarEdicion(ing) {
   ediciones.value[ing.ingreso_id] = {
     cantidad: Number(ing.cantidad ?? 0),
-    fecha: ing.fecha ? new Date(ing.fecha) : new Date(),
+    fecha: toLocalDate(ing.fecha) ?? new Date(),
     documento: ing.documento || '',
     dirty: false,
   }
@@ -150,7 +153,7 @@ async function recargar() {
         <Skeleton width="70%" height="14px" />
         <Skeleton width="85%" height="14px" />
       </div>
-
+      
       <template v-else>
         <div class="flex flex-column gap-2">
           <h4 class="section-subtitle">Entregas ({{ ingresos.length }})</h4>
@@ -164,6 +167,7 @@ async function recargar() {
 
             <div v-for="ing in ingresos" :key="ing.ingreso_id" class="ingreso-row ingreso-row--editable">
               <template v-if="ediciones[ing.ingreso_id]">
+               
                 <DatePicker
                   v-model="ediciones[ing.ingreso_id].fecha"
                   date-format="dd/mm/yy"

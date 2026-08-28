@@ -5,6 +5,7 @@ import { usePedidosStore } from '@/stores/pedidosStore'
 import { useEstadosStore } from '@/stores/estadosStore'
 import { supabase } from '@/api/supabaseClient'
 import { useToast } from 'primevue/usetoast'
+import { toLocalDate } from '@/utils/format'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -135,11 +136,9 @@ function parseFecha(valor) {
   const m = String(valor).trim().match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/)
   if (m) {
     const [dia, mes, anio] = [m[1], m[2], m[3].length === 2 ? `20${m[3]}` : m[3]]
-    const d = new Date(`${anio}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`)
-    return isNaN(d) ? null : d
+    return toLocalDate(`${anio}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`)
   }
-  const d = new Date(valor)
-  return isNaN(d) ? null : d
+  return toLocalDate(valor)
 }
 
 async function leerYllenar() {
