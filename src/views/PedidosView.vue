@@ -44,7 +44,7 @@
       style="min-width: 200px"
     />
 
-    <Button label="Nuevo pedido" icon="pi pi-plus" @click="abrirNuevo" />
+    <Button v-if="auth.canWrite" label="Nuevo pedido" icon="pi pi-plus" @click="abrirNuevo" />
   </div>
 
   <div class="page-content">
@@ -84,13 +84,14 @@
 
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { isConfigured } from '@/api/supabaseClient'
 import { useEstadosStore } from '@/stores/estadosStore'
 import { usePedidosStore } from '@/stores/pedidosStore'
 import { useDetallePedidoStore } from '@/stores/detallePedidoStore'
 import { useFiltroGlobalStore } from '@/stores/filtroGlobalStore'
+import { useAuthStore } from '@/stores/authStore'
 import { useConfirm } from 'primevue/useconfirm'
 import { useToast } from 'primevue/usetoast'
 import PedidosDataView from '@/components/PedidosDataView.vue'
@@ -105,10 +106,11 @@ const estadosStore = useEstadosStore()
 const pedidosStore = usePedidosStore()
 const detalleStore = useDetallePedidoStore()
 const filtroGlobalStore = useFiltroGlobalStore()
+const auth = useAuthStore()
 const confirm = useConfirm()
 const toast = useToast()
 
-const { estados, loading: cargandoEstados } = storeToRefs(estadosStore)
+const { filtrosEstado: estados, loading: cargandoEstados } = storeToRefs(estadosStore)
 const { total } = storeToRefs(pedidosStore)
 const { pedido: resumenPedido, items: resumenItems, estadoPedido: resumenEstado } = storeToRefs(detalleStore)
 
@@ -120,7 +122,7 @@ const dialogResumen = ref(false)
 const pedidoSeleccionado = ref(null)
 const configurado = isConfigured
 
-const filtroEstado = ref({
+const filtroEstado = computed({
   get: () => pedidosStore.filtroEstado,
   set: (v) => {
     pedidosStore.filtroEstado = v

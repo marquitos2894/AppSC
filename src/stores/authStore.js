@@ -23,6 +23,9 @@ export const useAuthStore = defineStore('auth', {
   getters: {
     isAuthenticated: (s) => Boolean(s.session?.user),
     email: (s) => s.user?.email ?? null,
+    role: (s) => s.user?.app_metadata?.role ?? null,
+    isReadOnly: (s) => s.user?.app_metadata?.role === 'viewer',
+    canWrite: (s) => s.user?.app_metadata?.role !== 'viewer',
   },
 
   actions: {

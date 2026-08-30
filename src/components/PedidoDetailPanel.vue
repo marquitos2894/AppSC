@@ -2,11 +2,13 @@
 import { ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useDetallePedidoStore } from '@/stores/detallePedidoStore'
+import { useAuthStore } from '@/stores/authStore'
 import { useConfirm } from 'primevue/useconfirm'
 import { useToast } from 'primevue/usetoast'
 import { formatQty, formatDate, toLocalDate, toISODate } from '@/utils/format'
 
 const detalleStore = useDetallePedidoStore()
+const auth = useAuthStore()
 const confirm = useConfirm()
 const toast = useToast()
 
@@ -37,7 +39,7 @@ function claseAtencion(valor) {
 }
 
 function abrirEstado(item) {
-  if (esAtendido(item)) return
+  if (esAtendido(item) || auth.isReadOnly) return
   itemSeleccionado.value = item
   dialogEstado.value = true
 }
@@ -176,7 +178,7 @@ async function commitAprobada(item) {
               </template>
             </Column>
 
-            <Column header="Aprob." style="width: 90px">
+            <Column header="Aprob." header-class="columna-aprobada" style="width: 90px">
               <template #body="{ data }">
                 <InputNumber
                   v-model="aprobadaEdit[data.detalle_id]"
@@ -185,14 +187,16 @@ async function commitAprobada(item) {
                   :max-fraction-digits="2"
                   size="small"
                   style="width: 72px"
+                  class="columna-aprobada"
+                  :disabled="auth.isReadOnly"
                   @blur="commitAprobada(data)"
                 />
               </template>
             </Column>
 
-            <Column header="Atend." style="width: 70px">
+            <Column header="Atend." header-class="columna-atendida" style="width: 70px">
               <template #body="{ data }">
-                <span class="cell-num">{{ formatQty(data.cantidad_atendida) }}</span>
+                <span class="cell-num columna-atendida">{{ formatQty(data.cantidad_atendida) }}</span>
               </template>
             </Column>
 
@@ -214,7 +218,7 @@ async function commitAprobada(item) {
                     :nombre="data.estados_catalogo?.nombre"
                     size="sm"
                     v-tooltip.top="esAtendido(data) ? 'No editable (Atendido)' : 'Cambiar estado'"
-                    :class="esAtendido(data) ? 'estado-tag--locked' : 'estado-tag--clickable'"
+                    :class="esAtendido(data) || auth.isReadOnly ? 'estado-tag--locked' : 'estado-tag--clickable'"
                     @click="clickEstado(data)"
                   />
                   <span
@@ -235,10 +239,11 @@ async function commitAprobada(item) {
                     date-format="dd/mm/yy"
                     show-icon
                     size="small"
+                    :disabled="auth.isReadOnly"
                     @date-select="(d) => guardarFechaAprox(data, d)"
                   />
                   <Button
-                    v-if="data.fecha_aprox_atencion"
+                    v-if="auth.canWrite && data.fecha_aprox_atencion"
                     icon="pi pi-times"
                     text
                     rounded
@@ -256,6 +261,7 @@ async function commitAprobada(item) {
               <template #body="{ data }">
                 <div class="item-acciones">
                   <Button
+                    v-if="auth.canWrite"
                     icon="pi pi-plus"
                     text
                     rounded
@@ -274,6 +280,7 @@ async function commitAprobada(item) {
                     @click="abrirMovimientos(data)"
                   />
                   <Button
+                    v-if="auth.canWrite"
                     icon="pi pi-trash"
                     text
                     rounded

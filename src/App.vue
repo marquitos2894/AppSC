@@ -132,6 +132,7 @@ async function salir() {
             class="global-filter-select"
             @change="cambiarGrupoCosto"
           />
+          <Tag v-if="auth.isReadOnly" value="Modo lectura" icon="pi pi-eye" severity="info" />
         </div>
         <RouterView />
       </main>

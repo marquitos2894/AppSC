@@ -19,6 +19,7 @@ const texto = ref('')
 const loading = ref(false)
 const vistaActual = ref('vista')
 const comentariosIncidencias = ref(new Map())
+const atencionesPorItem = ref(new Map())
 
 function esIncidencia(item) {
   return ['Observado', 'Rechazado'].includes(item?.estados_catalogo?.nombre)
@@ -60,6 +61,18 @@ function comentarioIncidencia(item) {
   return comentariosIncidencias.value.get(item.detalle_id) || 'Sin comentario registrado'
 }
 
+function atencionesItem(item) {
+  return atencionesPorItem.value.get(item.detalle_id) || []
+}
+
+function etiquetaAtencionItem(ingreso) {
+  const partes = [`${formatQty(ingreso.cantidad)} und.`]
+  if (ingreso.fecha) partes.push(formatDate(ingreso.fecha))
+  if (ingreso.documento) partes.push(`Doc. ${ingreso.documento}`)
+  if (ingreso.comentario?.trim()) partes.push(ingreso.comentario.trim())
+  return partes.join(' · ')
+}
+
 function construirResumen(comentarios = new Map()) {
   if (!props.pedido) return ''
 
@@ -73,8 +86,12 @@ function construirResumen(comentarios = new Map()) {
   lineas.push('Repuestos atendidos:')
   if (atendidos.value.length) {
     for (const item of atendidos.value) {
+      const atenciones = atencionesItem(item)
+      const detalle = atenciones.length
+        ? atenciones.map((ingreso) => etiquetaAtencionItem(ingreso)).join(' | ')
+        : 'Sin detalle de atención registrado'
       lineas.push(
-        `- ${descripcionItem(item)}: solicitada ${formatQty(item.cantidad_solicitada)}. Aprobada ${formatQty(item.cantidad_aprobada)}. Atendida ${formatQty(item.cantidad_atendida)}.`,
+        `- ${descripcionItem(item)}: solicitada ${formatQty(item.cantidad_solicitada)}. Aprobada ${formatQty(item.cantidad_aprobada)}. Atendida ${formatQty(item.cantidad_atendida)}. Detalle de atención: ${detalle}.`,
       )
     }
   } else {
@@ -113,10 +130,14 @@ async function generarResumen() {
   loading.value = true
   texto.value = ''
   comentariosIncidencias.value = new Map()
+  atencionesPorItem.value = new Map()
   try {
-    const historial = await detalleStore.fetchComentariosIncidencias(
-      incidencias.value.map((item) => item.detalle_id),
-    )
+    const [historialResult, atencionesResult] = await Promise.allSettled([
+      detalleStore.fetchComentariosIncidencias(incidencias.value.map((item) => item.detalle_id)),
+      detalleStore.fetchIngresosItems(atendidos.value.map((item) => item.detalle_id)),
+    ])
+    const historial = historialResult.status === 'fulfilled' ? historialResult.value : []
+    const atenciones = atencionesResult.status === 'fulfilled' ? atencionesResult.value : {}
     const comentarios = new Map()
 
     for (const item of incidencias.value) {
@@ -127,13 +148,22 @@ async function generarResumen() {
       if (movimiento?.comentario?.trim()) comentarios.set(item.detalle_id, movimiento.comentario.trim())
     }
     comentariosIncidencias.value = comentarios
+    atencionesPorItem.value = new Map(Object.entries(atenciones).map(([id, values]) => [Number(id), values]))
     texto.value = construirResumen(comentarios)
+    if (historialResult.status === 'rejected' || atencionesResult.status === 'rejected') {
+      toast.add({
+        severity: 'warn',
+        summary: 'Datos complementarios parciales',
+        detail: 'El resumen se generó con la información disponible.',
+        life: 6000,
+      })
+    }
   } catch (error) {
     texto.value = construirResumen()
     toast.add({
       severity: 'warn',
-      summary: 'Comentarios no disponibles',
-      detail: 'El resumen se generó sin los comentarios de incidencias.',
+      summary: 'Datos complementarios no disponibles',
+      detail: 'El resumen se generó con la información principal del pedido.',
       life: 6000,
     })
   } finally {
@@ -172,7 +202,7 @@ watch(
     :visible="visible"
     modal
     header="Resumen para correo"
-    :style="{ width: 'min(800px, calc(100vw - 2rem))' }"
+    :style="{ width: 'min(850px, calc(100vw - 2rem))' }"
     @update:visible="emit('update:visible', $event)"
   >
     <div class="resumen-dialogo">
@@ -187,7 +217,7 @@ watch(
             <div class="resumen-cabecera-icono" aria-hidden="true"><i class="pi pi-envelope"></i></div>
             <div>
               <h2>{{ codigoSc(pedido?.nro_sc) }}</h2>
-              <p>Resumen operativo para responder la solicitud.</p>
+              <p>{{ pedido?.motivo }}</p>
             </div>
           </div>
           <div class="resumen-estados" aria-label="Estado del pedido">
@@ -236,7 +266,7 @@ watch(
               v-if="atendidos.length"
               :value="atendidos"
               class="resumen-tabla"
-              table-style="min-width: 690px"
+              table-style="min-width: 930px"
             >
               <Column header="Repuesto">
                 <template #body="{ data }">
@@ -252,11 +282,22 @@ watch(
               <Column header="Solic." style="width: 88px">
                 <template #body="{ data }"><span class="resumen-cantidad">{{ formatQty(data.cantidad_solicitada) }}</span></template>
               </Column>
-              <Column header="Aprob." style="width: 88px">
-                <template #body="{ data }"><span class="resumen-cantidad">{{ formatQty(data.cantidad_aprobada) }}</span></template>
+              <Column header="Aprob." header-class="columna-aprobada" style="width: 88px">
+                <template #body="{ data }"><span class="resumen-cantidad resumen-cantidad--aprobada">{{ formatQty(data.cantidad_aprobada) }}</span></template>
               </Column>
-              <Column header="Atend." style="width: 88px">
+              <Column header="Atend." header-class="columna-atendida" style="width: 88px">
                 <template #body="{ data }"><span class="resumen-cantidad resumen-cantidad--atendida">{{ formatQty(data.cantidad_atendida) }}</span></template>
+              </Column>
+              <Column header="Detalle de atención" style="min-width: 250px">
+                <template #body="{ data }">
+                  <div class="atencion-detalle-cell">
+                    <span v-for="ingreso in atencionesItem(data)" :key="ingreso.ingreso_id">
+                      <i class="pi pi-calendar-check" aria-hidden="true"></i>
+                      {{ etiquetaAtencionItem(ingreso) }}
+                    </span>
+                    <span v-if="!atencionesItem(data).length" class="atencion-detalle-vacio">Sin detalle registrado</span>
+                  </div>
+                </template>
               </Column>
             </DataTable>
             <div v-else class="resumen-vacio">
@@ -278,7 +319,7 @@ watch(
               v-if="pendientes.length"
               :value="pendientes"
               class="resumen-tabla"
-              table-style="min-width: 820px"
+              table-style="min-width: 750px"
             >
               <Column header="Repuesto">
                 <template #body="{ data }">
@@ -296,14 +337,11 @@ watch(
                   <span class="resumen-cantidad">{{ formatQty(data.cantidad_solicitada) }}</span>
                 </template>
               </Column>
-              <Column header="Aprob." style="width: 88px">
-                <template #body="{ data }"><span class="resumen-cantidad">{{ formatQty(data.cantidad_aprobada) }}</span></template>
+              <Column header="Aprob." header-class="columna-aprobada" style="width: 88px">
+                <template #body="{ data }"><span class="resumen-cantidad resumen-cantidad--aprobada">{{ formatQty(data.cantidad_aprobada) }}</span></template>
               </Column>
-              <Column header="Atend." style="width: 88px">
+              <Column header="Atend." header-class="columna-atendida" style="width: 88px">
                 <template #body="{ data }"><span class="resumen-cantidad resumen-cantidad--atendida">{{ formatQty(data.cantidad_atendida) }}</span></template>
-              </Column>
-              <Column header="Pend." style="width: 88px">
-                <template #body="{ data }"><span class="resumen-cantidad">{{ formatQty(detalleStore.pendiente(data)) }}</span></template>
               </Column>
               <Column header="Fecha aprox" style="width: 190px">
                 <template #body="{ data }">
@@ -348,8 +386,8 @@ watch(
               <Column header="Solic." style="width: 88px">
                 <template #body="{ data }"><span class="resumen-cantidad">{{ formatQty(data.cantidad_solicitada) }}</span></template>
               </Column>
-              <Column header="Aprob." style="width: 88px">
-                <template #body="{ data }"><span class="resumen-cantidad">{{ formatQty(data.cantidad_aprobada) }}</span></template>
+              <Column header="Aprob." header-class="columna-aprobada" style="width: 88px">
+                <template #body="{ data }"><span class="resumen-cantidad resumen-cantidad--aprobada">{{ formatQty(data.cantidad_aprobada) }}</span></template>
               </Column>
               <Column header="Estado" style="width: 125px">
                 <template #body="{ data }"><EstadoTag :nombre="data.estados_catalogo?.nombre" size="sm" /></template>
@@ -495,12 +533,21 @@ watch(
 }
 
 .resumen-cantidad--atendida { color: var(--atendido); }
+.resumen-cantidad--aprobada { color: #2f6f9f; }
+
+.resumen-tabla :deep(.columna-aprobada) { color: #2f6f9f !important; }
+.resumen-tabla :deep(.columna-atendida) { color: #2f8b74 !important; }
 
 .resumen-fecha { gap: 6px; color: var(--text); font-size: 12.5px; white-space: nowrap; }
 .resumen-fecha i { color: var(--accent-500); font-size: 12px; }
 .resumen-fecha.pendiente { color: var(--text-muted); font-style: italic; }
 
 .resumen-motivo { display: block; max-width: 290px; color: var(--text); font-size: 12.5px; line-height: 1.4; white-space: normal; }
+
+.atencion-detalle-cell { display: flex; flex-direction: column; gap: 4px; color: var(--text); font-size: 12px; line-height: 1.35; }
+.atencion-detalle-cell span { display: flex; align-items: flex-start; gap: 6px; }
+.atencion-detalle-cell i { margin-top: 2px; color: var(--atendido); font-size: 11px; }
+.atencion-detalle-vacio { color: var(--text-muted); font-style: italic; }
 
 .resumen-vacio {
   gap: 8px;

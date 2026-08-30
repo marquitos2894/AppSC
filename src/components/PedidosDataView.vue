@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia'
 import { usePedidosStore } from '@/stores/pedidosStore'
 import { useDetallePedidoStore } from '@/stores/detallePedidoStore'
 import { useFiltroGlobalStore } from '@/stores/filtroGlobalStore'
+import { useAuthStore } from '@/stores/authStore'
 import { formatQty, formatDate } from '@/utils/format'
 
 const emit = defineEmits(['nuevo', 'eliminar', 'cambiar-estado', 'historial', 'autorizar', 'generar-resumen'])
@@ -11,10 +12,11 @@ const emit = defineEmits(['nuevo', 'eliminar', 'cambiar-estado', 'historial', 'a
 const pedidosStore = usePedidosStore()
 const detalleStore = useDetallePedidoStore()
 const filtroGlobalStore = useFiltroGlobalStore()
+const auth = useAuthStore()
 
 const { pedidos, loading, total } = storeToRefs(pedidosStore)
 
-const layout = ref('list')
+const layout = ref('grid')
 const first = ref(0)
 const rows = ref(12)
 
@@ -48,6 +50,10 @@ function claseAtencionPedido(valor) {
 function etiquetaAtencionPedido(valor) {
   return { PENDIENTE: 'Pendiente', PARCIAL: 'Parcial', COMPLETO: 'Completo' }[valor] || ''
 }
+
+function etiquetaGrupoCosto(pedido) {
+  return pedido.grupo_costo || 'Sin grupo de costo'
+}
 </script>
 
 <template>
@@ -60,8 +66,7 @@ function etiquetaAtencionPedido(valor) {
       paginator
       :rows-per-page-options="[12, 24, 48]"
       :total-records="total"
-      :always-show-paginator="false"
-    >
+      :always-show-paginator="false">
       <template #header>
         <div class="dataview-toolbar">
           <span class="flex align-items-center gap-2" style="font-size: 12.5px; color: var(--text-muted)">
@@ -73,20 +78,18 @@ function etiquetaAtencionPedido(valor) {
             <button
               type="button"
               class="layout-toggle-btn"
-              :class="{ active: layout === 'list' }"
-              aria-label="Vista lista"
-              @click="layout = 'list'"
-            >
-              <i class="pi pi-list"></i>
+              :class="{ active: layout === 'grid' }"
+              aria-label="Vista cuadrícula"
+              @click="layout = 'grid'">
+              <i class="pi pi-th-large"></i>
             </button>
             <button
               type="button"
               class="layout-toggle-btn"
-              :class="{ active: layout === 'grid' }"
-              aria-label="Vista cuadrícula"
-              @click="layout = 'grid'"
-            >
-              <i class="pi pi-th-large"></i>
+              :class="{ active: layout === 'list' }"
+              aria-label="Vista lista"
+              @click="layout = 'list'">
+              <i class="pi pi-list"></i>
             </button>
           </div>
         </div>
@@ -119,6 +122,11 @@ function etiquetaAtencionPedido(valor) {
             </span -->
 
             <span class="pedido-row-fecha">{{ formatDate(pedido.fecha_emision) }}</span>
+
+            <span class="grupo-costo-badge" :title="etiquetaGrupoCosto(pedido)">
+              <i class="pi pi-tag" aria-hidden="true"></i>
+              {{ etiquetaGrupoCosto(pedido) }}
+            </span>
 
             <div class="cell-motivo" :title="pedido.motivo">
               <template v-if="pedido.motivo">{{ pedido.motivo }}</template>
@@ -169,6 +177,7 @@ function etiquetaAtencionPedido(valor) {
                 @click.stop="emit('generar-resumen', pedido)"
               />
               <Button
+                v-if="auth.canWrite"
                 icon="pi pi-lock-open"
                 text
                 rounded
@@ -179,6 +188,7 @@ function etiquetaAtencionPedido(valor) {
               />
  
               <Button
+                v-if="auth.canWrite"
                 icon="pi pi-pencil"
                 text
                 rounded
@@ -189,6 +199,7 @@ function etiquetaAtencionPedido(valor) {
                 @click.stop="emit('cambiar-estado', pedido)"
               />
               <Button
+                v-if="auth.canWrite"
                 icon="pi pi-trash"
                 text
                 rounded
@@ -239,6 +250,11 @@ function etiquetaAtencionPedido(valor) {
               <span class="mono">{{ contador(pedido.total_items) }} ítems</span>
             </div>
 
+            <span class="grupo-costo-badge" :title="etiquetaGrupoCosto(pedido)">
+              <i class="pi pi-tag" aria-hidden="true"></i>
+              {{ etiquetaGrupoCosto(pedido) }}
+            </span>
+
             <span
               class="auth-badge"
               :class="pedido.autorizado ? 'auth-ok' : 'auth-none'"
@@ -278,6 +294,7 @@ function etiquetaAtencionPedido(valor) {
                   @click.stop="emit('generar-resumen', pedido)"
                 />
                 <Button
+                  v-if="auth.canWrite"
                   icon="pi pi-lock-open"
                   text
                   rounded
@@ -287,6 +304,7 @@ function etiquetaAtencionPedido(valor) {
                   @click.stop="emit('autorizar', pedido)"
                 />
                 <Button
+                  v-if="auth.canWrite"
                   icon="pi pi-pencil"
                   text
                   rounded
@@ -306,6 +324,7 @@ function etiquetaAtencionPedido(valor) {
                   @click.stop="emit('historial', pedido)"
                 />
                 <Button
+                  v-if="auth.canWrite"
                   icon="pi pi-trash"
                   text
                   rounded
@@ -326,7 +345,7 @@ function etiquetaAtencionPedido(valor) {
           <i class="pi pi-inbox"></i>
           <p>No hay pedidos que coincidan.</p>
           <Button
-            v-if="!pedidos.length && !pedidosStore.busqueda && !pedidosStore.filtroEstado"
+            v-if="auth.canWrite && !pedidos.length && !pedidosStore.busqueda && !pedidosStore.filtroEstado"
             label="Crear el primer pedido"
             size="small"
             icon="pi pi-plus"

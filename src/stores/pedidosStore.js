@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { supabase } from '@/api/supabaseClient'
 import { SIN_GRUPO_COSTO, useFiltroGlobalStore } from '@/stores/filtroGlobalStore'
+import { PENDIENTES_ATENCION } from '@/stores/estadosStore'
 
 export const usePedidosStore = defineStore('pedidos', {
   state: () => ({
@@ -18,7 +19,11 @@ export const usePedidosStore = defineStore('pedidos', {
       let query = supabase
         .from('vw_pedidos_resumen')
         .select('*', { count: 'exact' })
-      if (this.filtroEstado) query = query.eq('estado_actual', this.filtroEstado)
+      if (this.filtroEstado === PENDIENTES_ATENCION) {
+        query = query.in('estado_atencion', ['PENDIENTE', 'PARCIAL'])
+      } else if (this.filtroEstado) {
+        query = query.eq('estado_actual', this.filtroEstado)
+      }
       if (filtroGlobal.grupoCosto === SIN_GRUPO_COSTO) {
         query = query.is('grupo_costo', null)
       } else if (filtroGlobal.grupoCosto) {

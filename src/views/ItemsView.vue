@@ -175,7 +175,7 @@ const filtroGlobalStore = useFiltroGlobalStore()
 const toast = useToast()
 
 const { items, total, loading } = storeToRefs(itemsStore)
-const { estados, loading: cargandoEstados } = storeToRefs(estadosStore)
+const { filtrosEstado: estados, loading: cargandoEstados } = storeToRefs(estadosStore)
 const configurado = isConfigured
 
 const filtroMaterial = ref('')

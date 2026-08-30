@@ -18,6 +18,8 @@ export function estadoColor(nombre) {
   return ESTADO_COLORS[nombre] || '#3B6E8F'
 }
 
+export const PENDIENTES_ATENCION = 'Pendientes de atención'
+
 export const useEstadosStore = defineStore('estados', {
   state: () => ({
     estados: [],
@@ -35,6 +37,7 @@ export const useEstadosStore = defineStore('estados', {
     byId: (s) => (id) => s.estados.find((e) => e.estado_id === id),
     pedidoStates: (s) => s.estados.filter((e) => e.ambito === 'pedido'),
     detalleStates: (s) => s.estados.filter((e) => e.ambito === 'detalle'),
+    filtrosEstado: (s) => [...s.estados, { nombre: PENDIENTES_ATENCION, especial: true }],
   },
 
   actions: {

@@ -129,6 +129,25 @@ export const useDetallePedidoStore = defineStore('detallePedido', {
       this.ingresosPorItem[detalleId] = data
     },
 
+    async fetchIngresosItems(detalleIds) {
+      if (!detalleIds?.length) return {}
+      const { data, error } = await supabase
+        .from('detalle_ingreso')
+        .select('*')
+        .in('detalle_id', detalleIds)
+        .eq('active', true)
+        .order('fecha', { ascending: false })
+        .order('ingreso_id', { ascending: false })
+      if (error) throw error
+      const agrupados = {}
+      for (const ingreso of data ?? []) {
+        if (!agrupados[ingreso.detalle_id]) agrupados[ingreso.detalle_id] = []
+        agrupados[ingreso.detalle_id].push(ingreso)
+      }
+      for (const detalleId of detalleIds) this.ingresosPorItem[detalleId] = agrupados[detalleId] ?? []
+      return agrupados
+    },
+
     async cambiarEstadoItem(detalleId, estadoId, comentario, fecha) {
       const { error } = await supabase
         .from('detalle_pedido')
