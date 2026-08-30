@@ -143,20 +143,32 @@
         <Column header="Pend." field="Acciones" style="width: 80px" sortable>
           <template #body="{ data }">
             <Button
-                    icon="pi pi-history"
-                    text
-                    rounded
-                    size="small"
-                    aria-label="Movimientos"
-                    v-tooltip.top="'Movimientos'"
-                    @click="abrirMovimientos(data)"/>
-              </template>
+              v-if="auth.canWrite"
+              icon="pi pi-pencil"
+              text
+              rounded
+              size="small"
+              aria-label="Editar ítem"
+              v-tooltip.top="'Editar ítem'"
+              @click="abrirEdicion(data)"
+            />
+            <Button
+              icon="pi pi-history"
+              text
+              rounded
+              size="small"
+              aria-label="Movimientos"
+              v-tooltip.top="'Movimientos'"
+              @click="abrirMovimientos(data)"
+            />
+          </template>
         </Column>
 
       </DataTable>
     </div>
   </div>
   <ItemMovimientosDialog v-model:visible="dialogMovimientos" :item="itemSeleccionado" />
+  <ItemEditDialog v-model:visible="dialogEdicion" :item="itemSeleccionado" />
 </template>
 
 <script setup>
@@ -166,12 +178,15 @@ import { isConfigured } from '@/api/supabaseClient'
 import { useItemsStore } from '@/stores/itemsStore'
 import { useEstadosStore } from '@/stores/estadosStore'
 import { useFiltroGlobalStore } from '@/stores/filtroGlobalStore'
+import { useAuthStore } from '@/stores/authStore'
 import { useToast } from 'primevue/usetoast'
 import { formatQty, formatDate } from '@/utils/format'
+import ItemEditDialog from '@/components/ItemEditDialog.vue'
 
 const itemsStore = useItemsStore()
 const estadosStore = useEstadosStore()
 const filtroGlobalStore = useFiltroGlobalStore()
+const auth = useAuthStore()
 const toast = useToast()
 
 const { items, total, loading } = storeToRefs(itemsStore)
@@ -184,6 +199,7 @@ const filtroNroSc = ref('')
 const filtroEstado = ref(null)
 const first = ref(0)
 const dialogMovimientos = ref(false)
+const dialogEdicion = ref(false)
 const itemSeleccionado = ref(null)
 
 const sinFiltros = computed(() =>
@@ -231,6 +247,12 @@ function limpiarCampo(campo) {
 function abrirMovimientos(item) {
   itemSeleccionado.value = item
   dialogMovimientos.value = true
+}
+
+function abrirEdicion(item) {
+  if (!auth.canWrite) return
+  itemSeleccionado.value = item
+  dialogEdicion.value = true
 }
 
 async function limpiar() {

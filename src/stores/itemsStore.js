@@ -51,5 +51,14 @@ export const useItemsStore = defineStore('items', {
       this.filtroEstado = null
       await this.fetchItems()
     },
+
+    async editarItem(detalleId, cambios) {
+      const { error } = await supabase
+        .from('detalle_pedido')
+        .update(cambios)
+        .eq('detalle_id', detalleId)
+      if (error) throw error
+      await this.fetchItems()
+    },
   },
 })
