@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useDetallePedidoStore } from '@/stores/detallePedidoStore'
 import { useConfirm } from 'primevue/useconfirm'
@@ -16,6 +16,17 @@ const dialogEstado = ref(false)
 const dialogIngreso = ref(false)
 const dialogMovimientos = ref(false)
 const itemSeleccionado = ref(null)
+const aprobadaEdit = ref({})
+
+watch(
+  items,
+  (nuevos) => {
+    const mapa = {}
+    for (const it of nuevos ?? []) mapa[it.detalle_id] = Number(it.cantidad_aprobada ?? 0)
+    aprobadaEdit.value = mapa
+  },
+  { immediate: true },
+)
 
 function claseAtencion(valor) {
   return {
@@ -80,6 +91,17 @@ async function guardarFechaAprox(item, d) {
     toast.add({ severity: 'error', summary: 'Error', detail: e.message, life: 6000 })
   }
 }
+
+async function commitAprobada(item) {
+  const nuevo = Number(aprobadaEdit.value[item.detalle_id] ?? 0)
+  if (nuevo === Number(item.cantidad_aprobada ?? 0)) return
+  try {
+    await detalleStore.editarCantidadAprobada(item.detalle_id, nuevo)
+    toast.add({ severity: 'success', summary: 'Aprobación ajustada', life: 3000 })
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Error', detail: e.message, life: 6000 })
+  }
+}
 </script>
 
 <template>
@@ -122,6 +144,7 @@ async function guardarFechaAprox(item, d) {
           </div>
 
           <div v-if="pedido.motivo" class="detalle-motivo">{{ pedido.motivo }}</div>
+
         </div>
 
         <div class="detalle-section">
@@ -153,9 +176,17 @@ async function guardarFechaAprox(item, d) {
               </template>
             </Column>
 
-            <Column header="Aprob." style="width: 70px">
+            <Column header="Aprob." style="width: 90px">
               <template #body="{ data }">
-                <span class="cell-num">{{ formatQty(data.cantidad_aprobada) }}</span>
+                <InputNumber
+                  v-model="aprobadaEdit[data.detalle_id]"
+                  mode="decimal"
+                  :min="0"
+                  :max-fraction-digits="2"
+                  size="small"
+                  style="width: 72px"
+                  @blur="commitAprobada(data)"
+                />
               </template>
             </Column>
 

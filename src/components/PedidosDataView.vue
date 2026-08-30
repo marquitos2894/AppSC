@@ -3,12 +3,14 @@ import { ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { usePedidosStore } from '@/stores/pedidosStore'
 import { useDetallePedidoStore } from '@/stores/detallePedidoStore'
+import { useFiltroGlobalStore } from '@/stores/filtroGlobalStore'
 import { formatQty, formatDate } from '@/utils/format'
 
-const emit = defineEmits(['nuevo', 'eliminar', 'cambiar-estado', 'historial', 'autorizar'])
+const emit = defineEmits(['nuevo', 'eliminar', 'cambiar-estado', 'historial', 'autorizar', 'generar-resumen'])
 
 const pedidosStore = usePedidosStore()
 const detalleStore = useDetallePedidoStore()
+const filtroGlobalStore = useFiltroGlobalStore()
 
 const { pedidos, loading, total } = storeToRefs(pedidosStore)
 
@@ -17,7 +19,7 @@ const first = ref(0)
 const rows = ref(12)
 
 watch(
-  () => `${pedidosStore.busqueda}|${pedidosStore.filtroEstado}`,
+  () => `${pedidosStore.busqueda}|${pedidosStore.filtroEstado}|${filtroGlobalStore.grupoCosto}`,
   () => {
     first.value = 0
   },
@@ -158,6 +160,15 @@ function etiquetaAtencionPedido(valor) {
 
             <div class="item-acciones">
               <Button
+                icon="pi pi-file-edit"
+                text
+                rounded
+                size="small"
+                aria-label="Generar resumen"
+                v-tooltip.top="'Generar resumen para correo'"
+                @click.stop="emit('generar-resumen', pedido)"
+              />
+              <Button
                 icon="pi pi-lock-open"
                 text
                 rounded
@@ -257,6 +268,15 @@ function etiquetaAtencionPedido(valor) {
               </div>
 
               <div class="item-acciones">
+                <Button
+                  icon="pi pi-file-edit"
+                  text
+                  rounded
+                  size="small"
+                  aria-label="Generar resumen"
+                  v-tooltip.top="'Generar resumen para correo'"
+                  @click.stop="emit('generar-resumen', pedido)"
+                />
                 <Button
                   icon="pi pi-lock-open"
                   text

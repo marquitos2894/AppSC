@@ -73,12 +73,14 @@ create table if not exists detalle_ingreso (
   detalle_id bigint not null references detalle_pedido(detalle_id),
   cantidad   numeric(12,2) not null,
   documento  varchar(25),          -- referencia de documento (guía/factura)
+  comentario text,                 -- observaciones de la entrega
   fecha      date not null default current_date,
   timestamp  timestamptz not null default now(),
   active     boolean not null default true
 );
 
 alter table detalle_ingreso add column if not exists documento varchar(25);
+alter table detalle_ingreso add column if not exists comentario text;
 
 -- fecha pasa de timestamp a date (solo el día de la entrega)
 alter table detalle_ingreso alter column fecha type date using fecha::date;
@@ -711,6 +713,7 @@ select
   d.detalle_id,
   d.pedido_id,
   p.nro_sc,
+  p.grupo_costo,
   d.nro_parte,
   d.material,
   d.equipo,

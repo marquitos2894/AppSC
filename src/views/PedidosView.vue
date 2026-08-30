@@ -54,10 +54,17 @@
       @cambiar-estado="abrirCambiarEstado"
       @historial="abrirHistorial"
       @autorizar="abrirAutorizar"
+      @generar-resumen="abrirResumen"
     />
   </div>
 
   <PedidoDetailPanel />
+  <PedidoResumenDialog
+    v-model:visible="dialogResumen"
+    :pedido="resumenPedido"
+    :items="resumenItems"
+    :estado-pedido="resumenEstado"
+  />
   <PedidoFormDialog v-model:visible="dialogNuevo" @creado="alCrear" />
   <CambiarEstadoPedidoDialog
     v-model:visible="dialogCambiarEstado"
@@ -77,12 +84,13 @@
 
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { isConfigured } from '@/api/supabaseClient'
 import { useEstadosStore } from '@/stores/estadosStore'
 import { usePedidosStore } from '@/stores/pedidosStore'
 import { useDetallePedidoStore } from '@/stores/detallePedidoStore'
+import { useFiltroGlobalStore } from '@/stores/filtroGlobalStore'
 import { useConfirm } from 'primevue/useconfirm'
 import { useToast } from 'primevue/usetoast'
 import PedidosDataView from '@/components/PedidosDataView.vue'
@@ -91,20 +99,24 @@ import PedidoFormDialog from '@/components/PedidoFormDialog.vue'
 import CambiarEstadoPedidoDialog from '@/components/CambiarEstadoPedidoDialog.vue'
 import HistorialPedidoDialog from '@/components/HistorialPedidoDialog.vue'
 import AutorizarPedidoDialog from '@/components/AutorizarPedidoDialog.vue'
+import PedidoResumenDialog from '@/components/PedidoResumenDialog.vue'
 
 const estadosStore = useEstadosStore()
 const pedidosStore = usePedidosStore()
 const detalleStore = useDetallePedidoStore()
+const filtroGlobalStore = useFiltroGlobalStore()
 const confirm = useConfirm()
 const toast = useToast()
 
 const { estados, loading: cargandoEstados } = storeToRefs(estadosStore)
 const { total } = storeToRefs(pedidosStore)
+const { pedido: resumenPedido, items: resumenItems, estadoPedido: resumenEstado } = storeToRefs(detalleStore)
 
 const dialogNuevo = ref(false)
 const dialogCambiarEstado = ref(false)
 const dialogHistorial = ref(false)
 const dialogAutorizar = ref(false)
+const dialogResumen = ref(false)
 const pedidoSeleccionado = ref(null)
 const configurado = isConfigured
 
@@ -127,6 +139,11 @@ onMounted(async () => {
     notificarError(e)
   }
 })
+
+watch(
+  () => filtroGlobalStore.grupoCosto,
+  () => cargar().catch((e) => notificarError(e)),
+)
 
 async function cargar() {
   await pedidosStore.fetchPedidos()
@@ -169,6 +186,15 @@ function abrirHistorial(pedido) {
 function abrirAutorizar(pedido) {
   pedidoSeleccionado.value = pedido
   dialogAutorizar.value = true
+}
+
+async function abrirResumen(pedido) {
+  try {
+    await detalleStore.cargar(pedido.pedido_id)
+    dialogResumen.value = true
+  } catch (e) {
+    notificarError(e)
+  }
 }
 
 async function alAutorizar() {
@@ -221,4 +247,3 @@ function confirmarEliminar(row) {
   })
 }
 </script>
-

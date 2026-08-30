@@ -162,6 +162,7 @@ async function recargar() {
               <span>Fecha</span>
               <span>Cantidad</span>
               <span>Documento</span>
+              <span>Comentario</span>
               <span class="ta-right">Acciones</span>
             </div>
 
@@ -228,6 +229,9 @@ async function recargar() {
                 <span class="mono">{{ formatQty(ing.cantidad) }}</span>
                 <span class="mono ingreso-doc" :class="{ 'ingreso-doc--vacio': !ing.documento }">
                   {{ ing.documento || '—' }}
+                </span>
+                <span class="ingreso-comentario" :class="{ 'ingreso-doc--vacio': !ing.comentario }" :title="ing.comentario">
+                  {{ ing.comentario || '—' }}
                 </span>
                 <div class="ingreso-acciones">
                   <Button
@@ -342,6 +346,15 @@ async function recargar() {
 
 .ingreso-doc {
   font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ingreso-comentario {
+  flex: 1;
+  min-width: 0;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;

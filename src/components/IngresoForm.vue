@@ -16,6 +16,7 @@ const toast = useToast()
 const cantidad = ref(0)
 const fecha = ref(new Date())
 const documento = ref('')
+const comentario = ref('')
 const saving = ref(false)
 
 const aprobada = computed(() => Number(props.item?.cantidad_aprobada ?? 0))
@@ -32,6 +33,7 @@ watch(
       cantidad.value = pendiente.value
       fecha.value = new Date()
       documento.value = ''
+      comentario.value = ''
     }
   },
 )
@@ -49,7 +51,13 @@ async function registrar() {
   }
   saving.value = true
   try {
-    await detalleStore.registrarIngreso(props.item.detalle_id, cantidad.value, toISODate(fecha.value), documento.value)
+    await detalleStore.registrarIngreso(
+      props.item.detalle_id,
+      cantidad.value,
+      toISODate(fecha.value),
+      documento.value,
+      comentario.value,
+    )
     toast.add({
       severity: 'success',
       summary: 'Ingreso registrado',
@@ -132,6 +140,15 @@ async function registrar() {
           Máximo a ingresar: {{ formatQty(pendiente) }} (lo que queda pendiente).
         </small>
       </div>
+      <div class="flex flex-column gap-2">
+        <label class="field-label">Comentario</label>
+        <Textarea
+          v-model="comentario"
+          rows="2"
+          auto-resize
+          placeholder="Observaciones de la entrega (opcional)" />
+      </div>
+
     </div>
 
     <template #footer>

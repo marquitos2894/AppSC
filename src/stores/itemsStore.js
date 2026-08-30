@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { supabase } from '@/api/supabaseClient'
+import { SIN_GRUPO_COSTO, useFiltroGlobalStore } from '@/stores/filtroGlobalStore'
 
 export const useItemsStore = defineStore('items', {
   state: () => ({
@@ -15,6 +16,7 @@ export const useItemsStore = defineStore('items', {
   actions: {
     async fetchItems() {
       this.loading = true
+      const filtroGlobal = useFiltroGlobalStore()
       let query = supabase.from('vw_items_detalle').select('*', { count: 'exact' })
       if (this.filtroMaterial) query = query.ilike('material', `%${this.filtroMaterial}%`)
       if (this.filtroNroParte) query = query.ilike('nro_parte', `%${this.filtroNroParte}%`)
@@ -23,6 +25,11 @@ export const useItemsStore = defineStore('items', {
         query = query.ilike('nro_sc', `%${term}%`)
       }
       if (this.filtroEstado) query = query.eq('estado', this.filtroEstado)
+      if (filtroGlobal.grupoCosto === SIN_GRUPO_COSTO) {
+        query = query.is('grupo_costo', null)
+      } else if (filtroGlobal.grupoCosto) {
+        query = query.eq('grupo_costo', filtroGlobal.grupoCosto)
+      }
       const { data, error, count } = await query
         .order('pedido_id', { ascending: false })
         .order('detalle_id', { ascending: false })

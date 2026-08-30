@@ -85,6 +85,7 @@
         :value="items"
         :loading="itemsStore.loading"
         data-key="detalle_id"
+        v-model:first="first"
         :rows="15"
         paginator
         :rows-per-page-options="[15, 30, 60]"
@@ -159,16 +160,18 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { isConfigured } from '@/api/supabaseClient'
 import { useItemsStore } from '@/stores/itemsStore'
 import { useEstadosStore } from '@/stores/estadosStore'
+import { useFiltroGlobalStore } from '@/stores/filtroGlobalStore'
 import { useToast } from 'primevue/usetoast'
 import { formatQty, formatDate } from '@/utils/format'
 
 const itemsStore = useItemsStore()
 const estadosStore = useEstadosStore()
+const filtroGlobalStore = useFiltroGlobalStore()
 const toast = useToast()
 
 const { items, total, loading } = storeToRefs(itemsStore)
@@ -179,6 +182,7 @@ const filtroMaterial = ref('')
 const filtroNroParte = ref('')
 const filtroNroSc = ref('')
 const filtroEstado = ref(null)
+const first = ref(0)
 const dialogMovimientos = ref(false)
 const itemSeleccionado = ref(null)
 
@@ -196,7 +200,16 @@ onMounted(async () => {
   }
 })
 
+watch(
+  () => filtroGlobalStore.grupoCosto,
+  () => {
+    first.value = 0
+    aplicar()
+  },
+)
+
 async function aplicar() {
+  first.value = 0
   itemsStore.filtroMaterial = filtroMaterial.value
   itemsStore.filtroNroParte = filtroNroParte.value
   itemsStore.filtroNroSc = filtroNroSc.value
@@ -221,6 +234,7 @@ function abrirMovimientos(item) {
 }
 
 async function limpiar() {
+  first.value = 0
   filtroMaterial.value = ''
   filtroNroParte.value = ''
   filtroNroSc.value = ''

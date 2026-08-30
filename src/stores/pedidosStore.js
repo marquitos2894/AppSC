@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { supabase } from '@/api/supabaseClient'
+import { SIN_GRUPO_COSTO, useFiltroGlobalStore } from '@/stores/filtroGlobalStore'
 
 export const usePedidosStore = defineStore('pedidos', {
   state: () => ({
@@ -13,10 +14,16 @@ export const usePedidosStore = defineStore('pedidos', {
   actions: {
     async fetchPedidos() {
       this.loading = true
+      const filtroGlobal = useFiltroGlobalStore()
       let query = supabase
         .from('vw_pedidos_resumen')
         .select('*', { count: 'exact' })
       if (this.filtroEstado) query = query.eq('estado_actual', this.filtroEstado)
+      if (filtroGlobal.grupoCosto === SIN_GRUPO_COSTO) {
+        query = query.is('grupo_costo', null)
+      } else if (filtroGlobal.grupoCosto) {
+        query = query.eq('grupo_costo', filtroGlobal.grupoCosto)
+      }
       if (this.busqueda) {
         const term = this.busqueda.replace(/^sc/i, '')
         query = query.ilike('nro_sc', `%${term}%`)

@@ -13,7 +13,7 @@ const items = computed(() =>
     return {
       key: e.historial_id,
       nombre,
-      fecha: formatDate(e.fecha, true),
+      fecha: formatDate(e.fecha),
       comentario: e.comentario,
       color: estadoColor(nombre),
     }

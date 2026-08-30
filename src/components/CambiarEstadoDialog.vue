@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia'
 import { useEstadosStore } from '@/stores/estadosStore'
 import { useDetallePedidoStore } from '@/stores/detallePedidoStore'
 import { useToast } from 'primevue/usetoast'
-import { formatQty } from '@/utils/format'
+import { formatQty, toISODate } from '@/utils/format'
 
 const props = defineProps({
   item: { type: Object, default: null },
@@ -21,6 +21,7 @@ const { detalleStates } = storeToRefs(estadosStore)
 const estadoId = ref(null)
 const cantidadAprobada = ref(0)
 const comentario = ref('')
+const fecha = ref(new Date())
 const saving = ref(false)
 
 const estadoOptions = computed(() =>
@@ -61,12 +62,13 @@ watch(
       estadoId.value = props.item.estado_actual_id
       cantidadAprobada.value = Number(props.item.cantidad_aprobada) || Number(props.item.cantidad_solicitada)
       comentario.value = ''
+      fecha.value = new Date()
     }
   },
 )
 
 async function guardar() {
-  if (!props.item || !estadoId.value || esMismoEstado.value) return
+  if (!props.item || !estadoId.value || esMismoEstado.value || !fecha.value) return
   saving.value = true
   try {
     if (esAprobado.value) {
@@ -75,6 +77,7 @@ async function guardar() {
         estadoId.value,
         cantidadAprobada.value,
         comentario.value || null,
+        toISODate(fecha.value),
       )
       toast.add({
         severity: 'success',
@@ -87,6 +90,7 @@ async function guardar() {
         props.item.detalle_id,
         estadoId.value,
         comentario.value || null,
+        toISODate(fecha.value),
       )
       toast.add({
         severity: 'success',
@@ -143,6 +147,11 @@ async function guardar() {
         <small v-if="estadoEnCompraId && !itemAprobado" style="color: var(--text-muted)">
           "En compra" requiere que el ítem esté aprobado.
         </small>
+      </div>
+
+      <div class="flex flex-column gap-2">
+        <label class="field-label">Fecha de registro</label>
+        <DatePicker v-model="fecha" date-format="dd/mm/yy" fluid />
       </div>
 
       <div v-if="esAprobado" class="flex flex-column gap-2">

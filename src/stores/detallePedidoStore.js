@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { supabase } from '@/api/supabaseClient'
 import { usePedidosStore } from '@/stores/pedidosStore'
+import { useEstadosStore } from '@/stores/estadosStore'
 
 export const useDetallePedidoStore = defineStore('detallePedido', {
   state: () => ({
@@ -101,6 +102,20 @@ export const useDetallePedidoStore = defineStore('detallePedido', {
       this.historialPorItem[detalleId] = data
     },
 
+    async fetchComentariosIncidencias(detalleIds) {
+      if (!detalleIds?.length) return []
+
+      const { data, error } = await supabase
+        .from('detalle_historial_estados')
+        .select('detalle_id, estado_id, comentario, fecha, historial_id')
+        .in('detalle_id', detalleIds)
+        .eq('active', true)
+        .order('fecha', { ascending: false })
+        .order('historial_id', { ascending: false })
+      if (error) throw error
+      return data
+    },
+
     async fetchIngresos(detalleId) {
       this.loadingMapa[`ing-${detalleId}`] = true
       const { data, error } = await supabase
@@ -114,30 +129,54 @@ export const useDetallePedidoStore = defineStore('detallePedido', {
       this.ingresosPorItem[detalleId] = data
     },
 
-    async cambiarEstadoItem(detalleId, estadoId, comentario) {
+    async cambiarEstadoItem(detalleId, estadoId, comentario, fecha) {
       const { error } = await supabase
         .from('detalle_pedido')
         .update({ estado_actual_id: estadoId })
         .eq('detalle_id', detalleId)
       if (error) throw error
-      if (comentario) await this._anotarComentario(detalleId, comentario)
+      await this._anotarMovimiento(detalleId, { fecha, comentario })
       await this._recargarTodo()
     },
 
-    async aprobarItem(detalleId, estadoId, cantidadAprobada, comentario) {
+    async aprobarItem(detalleId, estadoId, cantidadAprobada, comentario, fecha) {
       const { error } = await supabase
         .from('detalle_pedido')
         .update({ estado_actual_id: estadoId, cantidad_aprobada: cantidadAprobada })
         .eq('detalle_id', detalleId)
       if (error) throw error
-      if (comentario) await this._anotarComentario(detalleId, comentario)
+      await this._anotarMovimiento(detalleId, { fecha, comentario })
       await this._recargarTodo()
     },
 
-    async registrarIngreso(detalleId, cantidad, fecha, documento) {
+    async editarCantidadAprobada(detalleId, cantidad) {
+      const { error } = await supabase
+        .from('detalle_pedido')
+        .update({ cantidad_aprobada: cantidad })
+        .eq('detalle_id', detalleId)
+      if (error) throw error
+
+      const idAprobado = useEstadosStore().byName('Aprobado')?.estado_id
+      if (idAprobado) {
+        await supabase.from('detalle_historial_estados').insert({
+          detalle_id: detalleId,
+          estado_id: idAprobado,
+          comentario: 'Aprobación ajustada',
+        })
+      }
+      await this._recargarTodo()
+    },
+
+    async registrarIngreso(detalleId, cantidad, fecha, documento, comentario) {
       const { error } = await supabase
         .from('detalle_ingreso')
-        .insert({ detalle_id: detalleId, cantidad, fecha: fecha ?? null, documento: documento || null })
+        .insert({
+          detalle_id: detalleId,
+          cantidad,
+          fecha: fecha ?? null,
+          documento: documento || null,
+          comentario: comentario?.trim() || null,
+        })
       if (error) throw error
       await this._recargarTodo()
     },
@@ -178,20 +217,24 @@ export const useDetallePedidoStore = defineStore('detallePedido', {
       await this._recargarTodo()
     },
 
-    async _anotarComentario(detalleId, comentario) {
+    async _anotarMovimiento(detalleId, { fecha, comentario }) {
       const { data: ultimo } = await supabase
         .from('detalle_historial_estados')
         .select('historial_id')
         .eq('detalle_id', detalleId)
-        .order('fecha', { ascending: false })
         .order('historial_id', { ascending: false })
         .limit(1)
         .maybeSingle()
       if (ultimo) {
-        await supabase
-          .from('detalle_historial_estados')
-          .update({ comentario })
-          .eq('historial_id', ultimo.historial_id)
+        const patch = {}
+        if (fecha) patch.fecha = fecha
+        if (comentario) patch.comentario = comentario
+        if (Object.keys(patch).length) {
+          await supabase
+            .from('detalle_historial_estados')
+            .update(patch)
+            .eq('historial_id', ultimo.historial_id)
+        }
       }
     },
 
