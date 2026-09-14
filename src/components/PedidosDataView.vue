@@ -6,6 +6,7 @@ import { useDetallePedidoStore } from '@/stores/detallePedidoStore'
 import { useFiltroGlobalStore } from '@/stores/filtroGlobalStore'
 import { useAuthStore } from '@/stores/authStore'
 import { formatQty, formatDate } from '@/utils/format'
+import { estiloGrupoCosto } from '@/utils/grupoCosto'
 
 const emit = defineEmits(['nuevo', 'eliminar', 'cambiar-estado', 'historial', 'autorizar', 'generar-resumen'])
 
@@ -123,7 +124,7 @@ function etiquetaGrupoCosto(pedido) {
 
             <span class="pedido-row-fecha">{{ formatDate(pedido.fecha_emision) }}</span>
 
-            <span class="grupo-costo-badge" :title="etiquetaGrupoCosto(pedido)">
+            <span class="grupo-costo-badge" :style="estiloGrupoCosto(pedido.grupo_costo)" :title="etiquetaGrupoCosto(pedido)">
               <i class="pi pi-tag" aria-hidden="true"></i>
               {{ etiquetaGrupoCosto(pedido) }}
             </span>
@@ -250,7 +251,7 @@ function etiquetaGrupoCosto(pedido) {
               <span class="mono">{{ contador(pedido.total_items) }} ítems</span>
             </div>
 
-            <span class="grupo-costo-badge" :title="etiquetaGrupoCosto(pedido)">
+            <span class="grupo-costo-badge" :style="estiloGrupoCosto(pedido.grupo_costo)" :title="etiquetaGrupoCosto(pedido)">
               <i class="pi pi-tag" aria-hidden="true"></i>
               {{ etiquetaGrupoCosto(pedido) }}
             </span>

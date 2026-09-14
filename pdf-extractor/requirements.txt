@@ -1,0 +1,4 @@
+fastapi==0.124.4
+uvicorn[standard]==0.38.0
+pdfplumber==0.11.8
+python-multipart==0.0.20

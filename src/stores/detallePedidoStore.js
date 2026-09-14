@@ -236,24 +236,43 @@ export const useDetallePedidoStore = defineStore('detallePedido', {
       await this._recargarTodo()
     },
 
+    async editarComentarioMovimiento(historialId, comentario) {
+      const { error } = await supabase.rpc('fn_editar_comentario_movimiento_detalle', {
+        p_historial_id: historialId,
+        p_comentario: comentario?.trim() || null,
+      })
+      if (error) throw error
+    },
+
+    async corregirUltimoMovimiento(detalleId, historialId, estadoId, motivo) {
+      const { error } = await supabase.rpc('fn_corregir_ultimo_movimiento_detalle', {
+        p_detalle_id: detalleId,
+        p_historial_id: historialId,
+        p_estado_id: estadoId,
+        p_motivo: motivo.trim(),
+      })
+      if (error) throw error
+      await this._recargarTodo()
+    },
+
     async _anotarMovimiento(detalleId, { fecha, comentario }) {
-      const { data: ultimo } = await supabase
+      const { data: ultimo, error } = await supabase
         .from('detalle_historial_estados')
         .select('historial_id')
         .eq('detalle_id', detalleId)
         .order('historial_id', { ascending: false })
         .limit(1)
         .maybeSingle()
+      if (error) throw error
       if (ultimo) {
-        const patch = {}
-        if (fecha) patch.fecha = fecha
-        if (comentario) patch.comentario = comentario
-        if (Object.keys(patch).length) {
-          await supabase
+        if (fecha) {
+          const { error: fechaError } = await supabase
             .from('detalle_historial_estados')
-            .update(patch)
+            .update({ fecha })
             .eq('historial_id', ultimo.historial_id)
+          if (fechaError) throw fechaError
         }
+        if (comentario) await this.editarComentarioMovimiento(ultimo.historial_id, comentario)
       }
     },
 

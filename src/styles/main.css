@@ -942,10 +942,10 @@ body {
   gap: 5px;
   max-width: 180px;
   padding: 4px 8px;
-  border: 1px solid #d7e2ea;
+  border: 1px solid var(--grupo-costo-borde, #d7e2ea);
   border-radius: 999px;
-  background: #f4f8fa;
-  color: var(--ink-800);
+  background: var(--grupo-costo-fondo, #f4f8fa);
+  color: var(--grupo-costo-texto, var(--ink-800));
   font-size: 11.5px;
   line-height: 1.2;
   white-space: nowrap;
@@ -955,7 +955,7 @@ body {
 
 .grupo-costo-badge i {
   flex: 0 0 auto;
-  color: var(--accent-500);
+  color: var(--grupo-costo-icono, var(--accent-500));
   font-size: 10px;
 }
 

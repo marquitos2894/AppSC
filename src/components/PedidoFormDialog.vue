@@ -6,6 +6,7 @@ import { useEstadosStore } from '@/stores/estadosStore'
 import { supabase } from '@/api/supabaseClient'
 import { useToast } from 'primevue/usetoast'
 import { toLocalDate } from '@/utils/format'
+import { extraerPdfLocal } from '@/services/pdfExtractorClient'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -26,6 +27,7 @@ const nroSc = ref('')
 const estadoId = ref(null)
 const items = ref([])
 const rutaSubida = ref(null)
+const pdfSeleccionado = ref(null)
 const leyendoPdf = ref(false)
 
 const gruposSugeridos = ['Unidad Corona Mantenimiento', 'Unidad Contonga Mantenimiento', 'Unidad Sotrami Mantenimiento']
@@ -48,6 +50,7 @@ function abrir() {
   estadoId.value = emision?.estado_id ?? null
   items.value = [nuevoItem()]
   rutaSubida.value = null
+  pdfSeleccionado.value = null
 }
 
 function nuevoItem() {
@@ -114,6 +117,7 @@ async function onAdvancedUpload({ files }) {
   const lista = Array.isArray(files) ? files : [files]
   try {
     for (const file of lista) {
+      pdfSeleccionado.value = file
       const carpeta = String(nroSc.value ?? '').trim() || 'sin-sc'
       const ruta = `${carpeta}/${file.name}`
       const { error } = await supabase.storage.from('Documentos').upload(ruta, file)
@@ -131,6 +135,24 @@ async function onAdvancedUpload({ files }) {
   }
 }
 
+async function leerPdfDesdeSupabase() {
+  const { data, error } = await supabase.functions.invoke('leer-pdf', {
+    body: { path: rutaSubida.value },
+  })
+  if (error) {
+    let detalle = error.message
+    try {
+      const body = await error.context?.json?.()
+      if (body?.error) detalle = body.error
+    } catch {
+      /* sin cuerpo legible */
+    }
+    throw new Error(detalle)
+  }
+  if (data?.error) throw new Error(data.error)
+  return data
+}
+
 function parseFecha(valor) {
   if (!valor) return null
   const m = String(valor).trim().match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/)
@@ -145,20 +167,13 @@ async function leerYllenar() {
   if (!rutaSubida.value) return
   leyendoPdf.value = true
   try {
-    const { data, error } = await supabase.functions.invoke('leer-pdf', {
-      body: { path: rutaSubida.value },
-    })
-    if (error) {
-      let detalle = error.message
-      try {
-        const body = await error.context?.json?.()
-        if (body?.error) detalle = body.error
-      } catch {
-        /* sin cuerpo legible */
-      }
-      throw new Error(detalle)
+    let data
+    try {
+      data = await extraerPdfLocal(pdfSeleccionado.value)
+    } catch (localError) {
+      console.warn('Extractor local no disponible, usando leer-pdf:', localError)
+      data = await leerPdfDesdeSupabase()
     }
-    if (data?.error) throw new Error(data.error)
 
     if (data.nro_sc) nroSc.value = Number(String(data.nro_sc).replace(/\D/g, '')) || null
     const f = parseFecha(data.fecha_emision)
@@ -176,6 +191,7 @@ async function leerYllenar() {
 
     toast.add({ severity: 'success', summary: 'Datos del PDF cargados', life: 4000 })
     rutaSubida.value = null
+    pdfSeleccionado.value = null
   } catch (e) {
     toast.add({ severity: 'error', summary: 'Error al leer PDF', detail: e.message, life: 6000 })
   } finally {

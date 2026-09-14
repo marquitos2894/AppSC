@@ -11,6 +11,13 @@ node_modules
 dist
 dist-ssr
 *.local
+.npm-cache/
+
+# Python local extractor
+pdf-extractor/.python_packages/
+pdf-extractor/.pip-cache/
+pdf-extractor/.tmp/
+pdf-extractor/**/__pycache__/
 
 # Env (Supabase credentials)
 .env

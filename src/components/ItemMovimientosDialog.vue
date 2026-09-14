@@ -2,6 +2,8 @@
 import { ref, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useDetallePedidoStore } from '@/stores/detallePedidoStore'
+import { useEstadosStore } from '@/stores/estadosStore'
+import { useAuthStore } from '@/stores/authStore'
 import { useConfirm } from 'primevue/useconfirm'
 import { useToast } from 'primevue/usetoast'
 import { formatQty, formatDate, toISODate, toLocalDate } from '@/utils/format'
@@ -14,6 +16,8 @@ const props = defineProps({
 const emit = defineEmits(['update:visible'])
 
 const detalleStore = useDetallePedidoStore()
+const estadosStore = useEstadosStore()
+const auth = useAuthStore()
 const confirm = useConfirm()
 const toast = useToast()
 
@@ -31,12 +35,26 @@ const cargando = computed(() => {
 })
 
 const ediciones = ref({})
+const comentariosEdicion = ref({})
+const correccionVisible = ref(false)
+const movimientoACorregir = ref(null)
+const correccion = ref({ estadoId: null, motivo: '' })
+
+const estadosCorregibles = computed(() =>
+  estadosStore.detalleStates.filter((estado) => estado.estado_id !== movimientoACorregir.value?.estado_id),
+)
+const ultimoMovimientoId = computed(() => {
+  const ultimo = [...historial.value].sort((a, b) => b.historial_id - a.historial_id)[0]
+  return ultimo?.historial_id ?? null
+})
 
 watch(
   () => props.visible,
   async (v) => {
     if (v && props.item) {
       ediciones.value = {}
+      comentariosEdicion.value = {}
+      correccionVisible.value = false
       try {
         await Promise.all([
           detalleStore.fetchHistorialItem(props.item.detalle_id),
@@ -130,6 +148,45 @@ async function recargar() {
     ])
   } catch (e) {
     toast.add({ severity: 'error', summary: 'Error', detail: e.message, life: 6000 })
+  }
+}
+
+function editarComentario(evento) {
+  comentariosEdicion.value[evento.historial_id] = evento.comentario || ''
+}
+
+async function guardarComentario(evento) {
+  try {
+    await detalleStore.editarComentarioMovimiento(evento.historial_id, comentariosEdicion.value[evento.historial_id])
+    comentariosEdicion.value[evento.historial_id] = undefined
+    toast.add({ severity: 'success', summary: 'Comentario actualizado', life: 3000 })
+    await recargar()
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Error', detail: e.message, life: 6000 })
+  }
+}
+
+function abrirCorreccion(evento) {
+  movimientoACorregir.value = evento
+  correccion.value = { estadoId: null, motivo: '' }
+  correccionVisible.value = true
+}
+
+async function guardarCorreccion() {
+  if (!movimientoACorregir.value || !correccion.value.estadoId || !correccion.value.motivo.trim()) return
+  try {
+    await detalleStore.corregirUltimoMovimiento(
+      props.item.detalle_id,
+      movimientoACorregir.value.historial_id,
+      correccion.value.estadoId,
+      correccion.value.motivo,
+    )
+    correccionVisible.value = false
+    movimientoACorregir.value = null
+    toast.add({ severity: 'success', summary: 'Movimiento corregido', life: 3000 })
+    await recargar()
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'No se pudo corregir', detail: e.message, life: 6000 })
   }
 }
 </script>
@@ -262,9 +319,80 @@ async function recargar() {
 
         <div class="flex flex-column gap-2">
           <h4 class="section-subtitle">Historial de estados</h4>
-          <HistorialTimeline :eventos="historial" />
+          <div v-if="historial.length" class="historial-estados">
+            <div v-for="evento in historial" :key="evento.historial_id" class="historial-movimiento">
+              <div class="historial-movimiento-head">
+                <div class="flex align-items-center gap-2">
+                  <EstadoTag :nombre="evento.estados_catalogo?.nombre" size="sm" />
+                  <span class="historial-fecha mono">{{ formatDate(evento.fecha) }}</span>
+                  <span v-if="evento.comentario_editado_en" class="historial-editado">Editado</span>
+                </div>
+                <div v-if="auth.canWrite" class="ingreso-acciones">
+                  <Button
+                    icon="pi pi-pencil"
+                    text
+                    rounded
+                    size="small"
+                    aria-label="Editar comentario"
+                    v-tooltip.top="'Editar comentario'"
+                    @click="editarComentario(evento)"
+                  />
+                  <Button
+                    v-if="evento.historial_id === ultimoMovimientoId && evento.estados_catalogo?.nombre !== 'Atendido'"
+                    icon="pi pi-refresh"
+                    text
+                    rounded
+                    size="small"
+                    severity="warn"
+                    aria-label="Corregir último movimiento"
+                    v-tooltip.top="'Corregir último movimiento'"
+                    @click="abrirCorreccion(evento)"
+                  />
+                </div>
+              </div>
+
+              <div v-if="comentariosEdicion[evento.historial_id] !== undefined" class="historial-comentario-edicion">
+                <Textarea v-model="comentariosEdicion[evento.historial_id]" rows="2" auto-resize maxlength="1000" />
+                <div class="ingreso-acciones">
+                  <Button label="Guardar" size="small" @click="guardarComentario(evento)" />
+                  <Button label="Cancelar" size="small" severity="secondary" text @click="comentariosEdicion[evento.historial_id] = undefined" />
+                </div>
+              </div>
+              <p v-else class="hist-item-comment" :class="{ empty: !evento.comentario }">
+                {{ evento.comentario || 'Sin comentario' }}
+              </p>
+            </div>
+          </div>
+          <p v-else class="hist-item-comment empty" style="margin: 0">Sin movimientos registrados.</p>
         </div>
       </template>
+    </div>
+  </Dialog>
+
+  <Dialog v-model:visible="correccionVisible" modal header="Corregir último movimiento" :style="{ width: '460px' }">
+    <div class="flex flex-column gap-3">
+      <p class="correccion-ayuda">
+        El movimiento actual se anulará sin borrarse y se registrará el estado de reemplazo.
+      </p>
+      <div class="flex flex-column gap-2">
+        <label for="estado-correccion">Estado correcto</label>
+        <Select
+          id="estado-correccion"
+          v-model="correccion.estadoId"
+          :options="estadosCorregibles"
+          option-label="nombre"
+          option-value="estado_id"
+          placeholder="Selecciona el estado"
+        />
+      </div>
+      <div class="flex flex-column gap-2">
+        <label for="motivo-correccion">Motivo de la corrección</label>
+        <Textarea id="motivo-correccion" v-model="correccion.motivo" rows="3" auto-resize maxlength="1000" />
+      </div>
+      <div class="flex justify-content-end gap-2">
+        <Button label="Cancelar" severity="secondary" text @click="correccionVisible = false" />
+        <Button label="Corregir movimiento" icon="pi pi-check" :disabled="!correccion.estadoId || !correccion.motivo.trim()" @click="guardarCorreccion" />
+      </div>
     </div>
   </Dialog>
 </template>
@@ -375,5 +503,67 @@ async function recargar() {
 .ta-right {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.historial-estados {
+  border-left: 2px solid #dde4eb;
+  margin-left: 6px;
+}
+
+.historial-movimiento {
+  position: relative;
+  padding: 0 0 13px 15px;
+}
+
+.historial-movimiento::before {
+  content: '';
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  left: -6px;
+  top: 6px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--accent-500);
+  box-shadow: 0 0 0 2px #b8c8d6;
+}
+
+.historial-movimiento:last-child {
+  padding-bottom: 0;
+}
+
+.historial-movimiento-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.historial-fecha,
+.historial-editado {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.historial-editado {
+  border: 1px solid #d9e2ea;
+  border-radius: 999px;
+  padding: 1px 5px;
+}
+
+.historial-comentario-edicion :deep(.p-textarea) {
+  width: 100%;
+  margin-top: 6px;
+}
+
+.historial-comentario-edicion .ingreso-acciones {
+  margin-top: 5px;
+}
+
+.correccion-ayuda {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
 }
 </style>

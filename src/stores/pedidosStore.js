@@ -13,6 +13,12 @@ export const usePedidosStore = defineStore('pedidos', {
   }),
 
   actions: {
+    normalizarNroSc(nroSc) {
+      const digitos = String(nroSc ?? '').replace(/\D/g, '')
+      if (!digitos) return ''
+      return digitos.replace(/^0+/, '') || '0'
+    },
+
     async fetchPedidos() {
       this.loading = true
       const filtroGlobal = useFiltroGlobalStore()
@@ -42,13 +48,36 @@ export const usePedidosStore = defineStore('pedidos', {
       this.total = count
     },
 
+    async buscarPedidoPorNroSc(nroSc) {
+      const normalizado = this.normalizarNroSc(nroSc)
+      if (!normalizado) return null
+
+      const { data, error } = await supabase
+        .from('pedido')
+        .select('pedido_id,nro_sc')
+        .eq('active', true)
+      if (error) throw error
+
+      return data.find((pedido) => this.normalizarNroSc(pedido.nro_sc) === normalizado) ?? null
+    },
+
     async crearPedido({ motivo, grupo_costo, nro_sc, fecha_emision, estadoId, items }) {
+      const pedidoExistente = await this.buscarPedidoPorNroSc(nro_sc)
+      if (pedidoExistente) {
+        throw new Error(`El N° SC ${nro_sc} ya existe en el pedido #${pedidoExistente.pedido_id}`)
+      }
+
       const { data: pedido, error: ePedido } = await supabase
         .from('pedido')
         .insert({ motivo, grupo_costo, nro_sc, fecha_emision, estado_actual_id: estadoId })
         .select()
         .single()
-      if (ePedido) throw ePedido
+      if (ePedido) {
+        if (ePedido.code === '23505') {
+          throw new Error(`El N° SC ${nro_sc} ya existe en otro pedido`)
+        }
+        throw ePedido
+      }
 
       const rows = items.map((item) => ({
         pedido_id: pedido.pedido_id,
