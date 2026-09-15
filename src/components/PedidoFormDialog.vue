@@ -134,8 +134,10 @@ async function onAdvancedUpload({ files }) {
   try {
     for (const file of lista) {
       pdfSeleccionado.value = file
-      const carpeta = String(nroSc.value ?? '').trim() || 'sin-sc'
-      const ruta = `${carpeta}/${file.name}`
+      // Aún no conocemos la SC hasta extraer el PDF. Una ruta temporal única
+      // evita que una carga anterior con el mismo nombre bloquee el formulario.
+      const temporalId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const ruta = `sin-sc/${temporalId}-${file.name}`
       const { error } = await supabase.storage.from('Documentos').upload(ruta, file)
       if (error) throw error
       rutaSubida.value = ruta
@@ -177,7 +179,7 @@ function parseFecha(valor) {
 }
 
 async function leerYllenar({ file = pdfSeleccionado.value, path = rutaSubida.value } = {}) {
-  if (!path) return
+  if (!path) return false
   leyendoPdf.value = true
   try {
     let data
@@ -203,11 +205,23 @@ async function leerYllenar({ file = pdfSeleccionado.value, path = rutaSubida.val
     }
 
     toast.add({ severity: 'success', summary: 'Datos del PDF cargados', life: 4000 })
-    rutaSubida.value = null
-    pdfSeleccionado.value = null
+    const { error: errorEliminar } = await supabase.storage.from('Documentos').remove([path])
+    if (errorEliminar) {
+      toast.add({
+        severity: 'warn',
+        summary: 'Datos cargados, PDF pendiente de limpieza',
+        detail: errorEliminar.message,
+        life: 6000,
+      })
+    } else {
+      rutaSubida.value = null
+      pdfSeleccionado.value = null
+    }
     pdfListoParaCrear.value = true
+    return true
   } catch (e) {
     toast.add({ severity: 'error', summary: 'Error al leer PDF', detail: e.message, life: 6000 })
+    return false
   } finally {
     leyendoPdf.value = false
   }
