@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { RouterView, RouterLink, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
@@ -13,10 +13,13 @@ const filtroGlobalStore = useFiltroGlobalStore()
 
 const railCollapsed = ref(false)
 const {
-  grupoCosto,
   gruposCosto,
   loading: cargandoGruposCosto,
 } = storeToRefs(filtroGlobalStore)
+const grupoCosto = computed({
+  get: () => filtroGlobalStore.grupoCosto,
+  set: (valor) => filtroGlobalStore.establecerGrupoCosto(valor),
+})
 
 watch(
   () => auth.isAuthenticated,

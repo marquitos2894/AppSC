@@ -55,6 +55,16 @@ function etiquetaAtencionPedido(valor) {
 function etiquetaGrupoCosto(pedido) {
   return pedido.grupo_costo || 'Sin grupo de costo'
 }
+
+function puedeCambiarEstado(pedido) {
+  return auth.canWrite && !pedido.paso_por_analisis
+}
+
+function abrirCambioEstado(evento, pedido) {
+  if (!puedeCambiarEstado(pedido)) return
+  evento.stopPropagation()
+  emit('cambiar-estado', pedido)
+}
 </script>
 
 <template>
@@ -134,7 +144,15 @@ function etiquetaGrupoCosto(pedido) {
               <span v-else class="cell-motivo-empty">Sin motivo</span>
             </div>
 
-            <EstadoTag :nombre="pedido.estado_actual" />
+            <EstadoTag
+              :nombre="pedido.estado_actual"
+              :class="puedeCambiarEstado(pedido) ? 'estado-tag--clickable' : 'estado-tag--locked'"
+              :tabindex="puedeCambiarEstado(pedido) ? 0 : undefined"
+              :role="puedeCambiarEstado(pedido) ? 'button' : undefined"
+              v-tooltip.top="puedeCambiarEstado(pedido) ? 'Cambiar estado' : 'Ya no editable (pasó por En análisis)'"
+              @click="abrirCambioEstado($event, pedido)"
+              @keydown.enter="abrirCambioEstado($event, pedido)"
+            />
 
             <span
               class="auth-badge"
@@ -190,17 +208,6 @@ function etiquetaGrupoCosto(pedido) {
  
               <Button
                 v-if="auth.canWrite"
-                icon="pi pi-pencil"
-                text
-                rounded
-                size="small"
-                aria-label="Cambiar estado"
-                v-tooltip.top="pedido.paso_por_analisis ? 'Ya no editable (pasó por En análisis)' : 'Cambiar estado'"
-                :disabled="pedido.paso_por_analisis"
-                @click.stop="emit('cambiar-estado', pedido)"
-              />
-              <Button
-                v-if="auth.canWrite"
                 icon="pi pi-trash"
                 text
                 rounded
@@ -236,7 +243,16 @@ function etiquetaGrupoCosto(pedido) {
           >
             <div class="pedido-card-grid-head">
               <span class="cell-id">SC{{ pedido.nro_sc }}</span>
-              <EstadoTag :nombre="pedido.estado_actual" size="sm" />
+              <EstadoTag
+                :nombre="pedido.estado_actual"
+                size="sm"
+                :class="puedeCambiarEstado(pedido) ? 'estado-tag--clickable' : 'estado-tag--locked'"
+                :tabindex="puedeCambiarEstado(pedido) ? 0 : undefined"
+                :role="puedeCambiarEstado(pedido) ? 'button' : undefined"
+                v-tooltip.top="puedeCambiarEstado(pedido) ? 'Cambiar estado' : 'Ya no editable (pasó por En análisis)'"
+                @click="abrirCambioEstado($event, pedido)"
+                @keydown.enter="abrirCambioEstado($event, pedido)"
+              />
             </div>
 
            
@@ -303,17 +319,6 @@ function etiquetaGrupoCosto(pedido) {
                   aria-label="Autorizar"
                   v-tooltip.top="'Autorizar'"
                   @click.stop="emit('autorizar', pedido)"
-                />
-                <Button
-                  v-if="auth.canWrite"
-                  icon="pi pi-pencil"
-                  text
-                  rounded
-                  size="small"
-                  aria-label="Cambiar estado"
-                  :disabled="pedido.estado_actual === 'En análisis'"
-                  v-tooltip.top="pedido.estado_actual === 'En análisis' ? 'Bloqueado en En análisis' : 'Cambiar estado'"
-                  @click.stop="emit('cambiar-estado', pedido)"
                 />
                 <Button
                   icon="pi pi-history"

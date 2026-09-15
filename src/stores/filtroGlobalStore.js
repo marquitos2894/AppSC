@@ -2,15 +2,40 @@ import { defineStore } from 'pinia'
 import { supabase } from '@/api/supabaseClient'
 
 export const SIN_GRUPO_COSTO = '__appsc_sin_grupo_costo__'
+const GRUPO_COSTO_STORAGE_KEY = 'appsc.grupo-costo-global'
+
+function leerGrupoCostoGuardado() {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.localStorage.getItem(GRUPO_COSTO_STORAGE_KEY) || null
+  } catch {
+    return null
+  }
+}
+
+function guardarGrupoCosto(valor) {
+  if (typeof window === 'undefined') return
+  try {
+    if (valor) window.localStorage.setItem(GRUPO_COSTO_STORAGE_KEY, valor)
+    else window.localStorage.removeItem(GRUPO_COSTO_STORAGE_KEY)
+  } catch {
+    /* El filtro sigue funcionando aunque el navegador bloquee el almacenamiento. */
+  }
+}
 
 export const useFiltroGlobalStore = defineStore('filtroGlobal', {
   state: () => ({
-    grupoCosto: null,
+    grupoCosto: leerGrupoCostoGuardado(),
     gruposCosto: [],
     loading: false,
   }),
 
   actions: {
+    establecerGrupoCosto(grupoCosto) {
+      this.grupoCosto = grupoCosto || null
+      guardarGrupoCosto(this.grupoCosto)
+    },
+
     async cargarGruposCosto() {
       this.loading = true
       try {
@@ -38,7 +63,7 @@ export const useFiltroGlobalStore = defineStore('filtroGlobal', {
     },
 
     limpiar() {
-      this.grupoCosto = null
+      this.establecerGrupoCosto(null)
       this.gruposCosto = []
     },
   },
