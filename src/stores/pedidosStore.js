@@ -96,6 +96,56 @@ export const usePedidosStore = defineStore('pedidos', {
       return pedido
     },
 
+    async actualizarPedido({ pedidoId, motivo, grupo_costo, nro_sc, fecha_emision, items }) {
+      const { data: actual, error: errorActual } = await supabase
+        .from('pedido')
+        .select('pedido_id, estado_actual_id')
+        .eq('pedido_id', pedidoId)
+        .eq('active', true)
+        .single()
+      if (errorActual) throw errorActual
+
+      const { data: analisis, error: errorAnalisis } = await supabase
+        .from('solicitud_historial_estados')
+        .select('historial_id, estados_catalogo:estado_id(nombre)')
+        .eq('pedido_id', pedidoId)
+      if (errorAnalisis) throw errorAnalisis
+      if ((analisis ?? []).some((h) => h.estados_catalogo?.nombre === 'En análisis')) {
+        throw new Error('El pedido ya pasó por En análisis y no puede editarse')
+      }
+
+      const existente = await this.buscarPedidoPorNroSc(nro_sc)
+      if (existente && existente.pedido_id !== pedidoId) {
+        throw new Error(`El N° SC ${nro_sc} ya existe en el pedido #${existente.pedido_id}`)
+      }
+      const { error: errorPedido } = await supabase
+        .from('pedido')
+        .update({ motivo, grupo_costo, nro_sc, fecha_emision })
+        .eq('pedido_id', pedidoId)
+      if (errorPedido) throw errorPedido
+
+      const idsConservados = items.filter((item) => item.detalle_id).map((item) => item.detalle_id)
+      const { error: errorEliminar } = await supabase
+        .from('detalle_pedido')
+        .update({ active: false })
+        .eq('pedido_id', pedidoId)
+        .eq('active', true)
+        .not('detalle_id', 'in', `(${idsConservados.join(',') || '0'})`)
+      if (errorEliminar) throw errorEliminar
+
+      for (const item of items) {
+        const datos = {
+          nro_parte: item.nro_parte || null, material: item.material || null,
+          equipo: item.equipo || null, cantidad_solicitada: item.cantidad_solicitada,
+        }
+        const { error } = item.detalle_id
+          ? await supabase.from('detalle_pedido').update(datos).eq('detalle_id', item.detalle_id)
+          : await supabase.from('detalle_pedido').insert({ ...datos, pedido_id: pedidoId, estado_actual_id: actual.estado_actual_id })
+        if (error) throw error
+      }
+      return actual
+    },
+
     async eliminarPedido(pedidoId) {
       const { error } = await supabase
         .from('pedido')

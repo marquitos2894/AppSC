@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { formatQty, formatDate } from '@/utils/format'
 import { estiloGrupoCosto } from '@/utils/grupoCosto'
 
-const emit = defineEmits(['nuevo', 'eliminar', 'cambiar-estado', 'historial', 'autorizar', 'generar-resumen'])
+const emit = defineEmits(['nuevo', 'eliminar', 'editar', 'cambiar-estado', 'historial', 'autorizar', 'generar-resumen'])
 
 const pedidosStore = usePedidosStore()
 const detalleStore = useDetallePedidoStore()
@@ -59,6 +59,8 @@ function etiquetaGrupoCosto(pedido) {
 function puedeCambiarEstado(pedido) {
   return auth.canWrite && !pedido.paso_por_analisis
 }
+
+function puedeEditar(pedido) { return auth.canWrite && !pedido.paso_por_analisis }
 
 function abrirCambioEstado(evento, pedido) {
   if (!puedeCambiarEstado(pedido)) return
@@ -196,6 +198,13 @@ function abrirCambioEstado(evento, pedido) {
                 @click.stop="emit('generar-resumen', pedido)"
               />
               <Button
+                v-if="puedeEditar(pedido)"
+                icon="pi pi-pen-to-square"
+                text rounded size="small" aria-label="Editar pedido"
+                v-tooltip.top="'Editar pedido'"
+                @click.stop="emit('editar', pedido)"
+              />
+              <Button
                 v-if="auth.canWrite"
                 icon="pi pi-lock-open"
                 text
@@ -319,6 +328,13 @@ function abrirCambioEstado(evento, pedido) {
                   aria-label="Autorizar"
                   v-tooltip.top="'Autorizar'"
                   @click.stop="emit('autorizar', pedido)"
+                />
+                <Button
+                  v-if="puedeEditar(pedido)"
+                  icon="pi pi-pen-to-square"
+                  text rounded size="small" aria-label="Editar pedido"
+                  v-tooltip.top="'Editar pedido'"
+                  @click.stop="emit('editar', pedido)"
                 />
                 <Button
                   icon="pi pi-history"

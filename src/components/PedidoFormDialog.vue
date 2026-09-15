@@ -10,8 +10,10 @@ import { extraerPdfLocal } from '@/services/pdfExtractorClient'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
+  pedido: { type: Object, default: null },
 })
-const emit = defineEmits(['update:visible', 'creado'])
+const emit = defineEmits(['update:visible', 'creado', 'actualizado'])
+const editando = computed(() => Boolean(props.pedido?.pedido_id))
 
 const pedidosStore = usePedidosStore()
 const estadosStore = useEstadosStore()
@@ -41,16 +43,25 @@ const estadoInicial = computed({
   set: (v) => (estadoId.value = v),
 })
 
-function abrir() {
+async function abrir() {
   fechaEmision.value = new Date()
   motivo.value = ''
   grupoCosto.value = ''
   nroSc.value = ''
   const emision = estadosStore.byName('Registrado')
-  estadoId.value = emision?.estado_id ?? null
+  estadoId.value = props.pedido?.estado_actual_id ?? emision?.estado_id ?? null
   items.value = [nuevoItem()]
   rutaSubida.value = null
   pdfSeleccionado.value = null
+  if (editando.value) {
+    fechaEmision.value = toLocalDate(props.pedido.fecha_emision) ?? new Date()
+    motivo.value = props.pedido.motivo ?? ''
+    grupoCosto.value = props.pedido.grupo_costo ?? ''
+    nroSc.value = props.pedido.nro_sc ?? ''
+    const { data, error } = await supabase.from('detalle_pedido').select('*').eq('pedido_id', props.pedido.pedido_id).eq('active', true).order('detalle_id')
+    if (error) throw error
+    items.value = data.length ? data : [nuevoItem()]
+  }
 }
 
 function nuevoItem() {
@@ -90,22 +101,25 @@ async function guardar() {
   try {
     const f = fechaEmision.value
     const fechaISO = `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}-${String(f.getDate()).padStart(2, '0')}`
-    const pedido = await pedidosStore.crearPedido({
+    const payload = {
       motivo: motivo.value || null,
       grupo_costo: grupoCosto.value || null,
       nro_sc: nroSc.value || null,
       fecha_emision: fechaISO,
       estadoId: estadoId.value,
       items: itemsValidos(),
-    })
+    }
+    const pedido = editando.value
+      ? await pedidosStore.actualizarPedido({ ...payload, pedidoId: props.pedido.pedido_id })
+      : await pedidosStore.crearPedido(payload)
     toast.add({
       severity: 'success',
-      summary: 'Pedido creado',
-      detail: `Pedido #${pedido.pedido_id} registrado con ${itemsValidos().length} ítem(s).`,
+      summary: editando.value ? 'Pedido actualizado' : 'Pedido creado',
+      detail: `Pedido #${pedido.pedido_id} guardado con ${itemsValidos().length} ítem(s).`,
       life: 4000,
     })
     emit('update:visible', false)
-    emit('creado', pedido.pedido_id)
+    emit(editando.value ? 'actualizado' : 'creado', pedido.pedido_id)
   } catch (e) {
     toast.add({ severity: 'error', summary: 'Error', detail: e.message, life: 6000 })
   } finally {
@@ -204,7 +218,7 @@ async function leerYllenar() {
   <Dialog
     :visible="visible"
     modal
-    header="Nueva solicitud de pedido"
+    :header="editando ? 'Editar solicitud de pedido' : 'Nueva solicitud de pedido'"
     :style="{ width: '720px' }"
     :closable="!saving"
     @update:visible="emit('update:visible', $event)"
@@ -212,7 +226,7 @@ async function leerYllenar() {
   >
     <div class="flex flex-column gap-4">
       <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 14px">
-        <div class="flex flex-column gap-2">
+        <div v-if="!editando" class="flex flex-column gap-2">
           <label class="field-label">N° SC (ERP)</label>
           <InputNumber  v-model="nroSc" placeholder="1020" class="mono" fluid />
         </div>
@@ -300,6 +314,7 @@ async function leerYllenar() {
           <div>
        
             <FileUpload
+              v-if="!editando"
               :custom-upload="true"
               @uploader="onAdvancedUpload"
               :multiple="false"
@@ -311,6 +326,7 @@ async function leerYllenar() {
               cancel-label="Cancelar"
             />
             <Button
+              v-if="!editando"
               label="Leer PDF y llenar"
               icon="pi pi-file-pdf"
               text
@@ -327,7 +343,7 @@ async function leerYllenar() {
 
     <template #footer>
       <Button label="Cancelar" text severity="secondary" :disabled="saving" @click="emit('update:visible', false)" />
-      <Button label="Crear pedido" icon="pi pi-check" :loading="saving" :disabled="!puedeGuardar()" @click="guardar" />
+      <Button :label="editando ? 'Guardar cambios' : 'Crear pedido'" icon="pi pi-check" :loading="saving" :disabled="!puedeGuardar()" @click="guardar" />
     </template>
   </Dialog>
 </template>

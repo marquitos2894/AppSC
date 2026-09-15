@@ -51,6 +51,7 @@
     <PedidosDataView
       @nuevo="abrirNuevo"
       @eliminar="confirmarEliminar"
+      @editar="abrirEditar"
       @cambiar-estado="abrirCambiarEstado"
       @historial="abrirHistorial"
       @autorizar="abrirAutorizar"
@@ -65,7 +66,7 @@
     :items="resumenItems"
     :estado-pedido="resumenEstado"
   />
-  <PedidoFormDialog v-model:visible="dialogNuevo" @creado="alCrear" />
+  <PedidoFormDialog v-model:visible="dialogNuevo" :pedido="pedidoAEditar" @creado="alCrear" @actualizado="alActualizar" />
   <CambiarEstadoPedidoDialog
     v-model:visible="dialogCambiarEstado"
     :pedido="pedidoSeleccionado"
@@ -120,6 +121,7 @@ const dialogHistorial = ref(false)
 const dialogAutorizar = ref(false)
 const dialogResumen = ref(false)
 const pedidoSeleccionado = ref(null)
+const pedidoAEditar = ref(null)
 const configurado = isConfigured
 
 const filtroEstado = computed({
@@ -172,6 +174,12 @@ function limpiarBusqueda() {
 }
 
 function abrirNuevo() {
+  pedidoAEditar.value = null
+  dialogNuevo.value = true
+}
+
+function abrirEditar(pedido) {
+  pedidoAEditar.value = pedido
   dialogNuevo.value = true
 }
 
@@ -227,6 +235,12 @@ async function alCambiarEstado() {
 function alCrear(pedidoId) {
   cargar().catch((e) => notificarError(e))
   detalleStore.abrir(pedidoId)
+}
+
+async function alActualizar() {
+  pedidoAEditar.value = null
+  await cargar()
+  if (detalleStore.pedidoId) await detalleStore.cargar(detalleStore.pedidoId)
 }
 
 function confirmarEliminar(row) {
