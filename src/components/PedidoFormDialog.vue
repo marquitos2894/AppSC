@@ -31,6 +31,7 @@ const items = ref([])
 const rutaSubida = ref(null)
 const pdfSeleccionado = ref(null)
 const leyendoPdf = ref(false)
+const pdfListoParaCrear = ref(false)
 
 const gruposSugeridos = ['Unidad Corona Mantenimiento', 'Unidad Contonga Mantenimiento', 'Unidad Sotrami Mantenimiento']
 
@@ -53,6 +54,7 @@ async function abrir() {
   items.value = [nuevoItem()]
   rutaSubida.value = null
   pdfSeleccionado.value = null
+  pdfListoParaCrear.value = false
   if (editando.value) {
     fechaEmision.value = toLocalDate(props.pedido.fecha_emision) ?? new Date()
     motivo.value = props.pedido.motivo ?? ''
@@ -137,21 +139,18 @@ async function onAdvancedUpload({ files }) {
       const { error } = await supabase.storage.from('Documentos').upload(ruta, file)
       if (error) throw error
       rutaSubida.value = ruta
-      toast.add({
-        severity: 'success',
-        summary: 'PDF subido',
-        detail: `Subido a Documentos/${ruta}`,
-        life: 4000,
-      })
+      // Al terminar la subida se completa el formulario automáticamente.
+      // El usuario conserva la revisión final antes de crear la solicitud.
+      await leerYllenar({ file, path: ruta })
     }
   } catch (e) {
     toast.add({ severity: 'error', summary: 'Error al subir', detail: e.message, life: 6000 })
   }
 }
 
-async function leerPdfDesdeSupabase() {
+async function leerPdfDesdeSupabase(path = rutaSubida.value) {
   const { data, error } = await supabase.functions.invoke('leer-pdf', {
-    body: { path: rutaSubida.value },
+    body: { path },
   })
   if (error) {
     let detalle = error.message
@@ -177,16 +176,16 @@ function parseFecha(valor) {
   return toLocalDate(valor)
 }
 
-async function leerYllenar() {
-  if (!rutaSubida.value) return
+async function leerYllenar({ file = pdfSeleccionado.value, path = rutaSubida.value } = {}) {
+  if (!path) return
   leyendoPdf.value = true
   try {
     let data
     try {
-      data = await extraerPdfLocal(pdfSeleccionado.value)
+      data = await extraerPdfLocal(file)
     } catch (localError) {
       console.warn('Extractor local no disponible, usando leer-pdf:', localError)
-      data = await leerPdfDesdeSupabase()
+      data = await leerPdfDesdeSupabase(path)
     }
 
     if (data.nro_sc) nroSc.value = Number(String(data.nro_sc).replace(/\D/g, '')) || null
@@ -206,6 +205,7 @@ async function leerYllenar() {
     toast.add({ severity: 'success', summary: 'Datos del PDF cargados', life: 4000 })
     rutaSubida.value = null
     pdfSeleccionado.value = null
+    pdfListoParaCrear.value = true
   } catch (e) {
     toast.add({ severity: 'error', summary: 'Error al leer PDF', detail: e.message, life: 6000 })
   } finally {
@@ -270,6 +270,11 @@ async function leerYllenar() {
         />
       </div>
 
+      <Message v-if="pdfListoParaCrear" severity="success" :closable="false">
+        <strong>Datos listos para crear{{ nroSc ? `: SC ${nroSc}` : '' }}.</strong>
+        Revisa los ítems y confirma la creación al final del formulario.
+      </Message>
+
       <div class="items-section">
         <div class="items-section-head">
           <span class="field-label" style="margin: 0">Ítems del pedido</span>
@@ -327,13 +332,13 @@ async function leerYllenar() {
             />
             <Button
               v-if="!editando"
-              label="Leer PDF y llenar"
+              label="Reintentar lectura del PDF"
               icon="pi pi-file-pdf"
               text
               size="small"
               :loading="leyendoPdf"
               :disabled="!rutaSubida || leyendoPdf"
-              v-tooltip.top="'Extrae los datos del PDF y rellena el formulario (elimina el archivo)'"
+              v-tooltip.top="'Solo úsalo si la lectura automática del PDF no se completó'"
               @click="leerYllenar"
             />
           </div>
@@ -343,7 +348,7 @@ async function leerYllenar() {
 
     <template #footer>
       <Button label="Cancelar" text severity="secondary" :disabled="saving" @click="emit('update:visible', false)" />
-      <Button :label="editando ? 'Guardar cambios' : 'Crear pedido'" icon="pi pi-check" :loading="saving" :disabled="!puedeGuardar()" @click="guardar" />
+      <Button :label="editando ? 'Guardar cambios' : (nroSc ? `Crear SC ${nroSc}` : 'Crear pedido')" icon="pi pi-check" :loading="saving" :disabled="!puedeGuardar()" @click="guardar" />
     </template>
   </Dialog>
 </template>

@@ -16,6 +16,8 @@ const { visible, pedido, items, historialPedido, loading, estadoPedido } = store
 
 const dialogEstado = ref(false)
 const dialogEstadoMasivo = ref(false)
+const dialogFechaAproxMasiva = ref(false)
+const dialogIngresoMasivo = ref(false)
 const dialogIngreso = ref(false)
 const dialogMovimientos = ref(false)
 const itemSeleccionado = ref(null)
@@ -30,6 +32,10 @@ const resumenEstados = computed(() => {
   }
   return [...conteos].map(([nombre, cantidad]) => ({ nombre, cantidad }))
 })
+
+const itemsSeleccionables = computed(() => (items.value ?? []).filter((item) => !esAtendido(item)))
+const todosSeleccionados = computed(() => itemsSeleccionables.value.length > 0 && itemsSeleccionados.value.length === itemsSeleccionables.value.length)
+const seleccionParcial = computed(() => itemsSeleccionados.value.length > 0 && !todosSeleccionados.value)
 
 watch(
   items,
@@ -67,6 +73,20 @@ function clickEstado(item) {
 function abrirCambioMasivo() {
   if (!itemsSeleccionados.value.length || auth.isReadOnly) return
   dialogEstadoMasivo.value = true
+}
+
+function abrirFechaAproxMasiva() {
+  if (!itemsSeleccionados.value.length || auth.isReadOnly) return
+  dialogFechaAproxMasiva.value = true
+}
+
+function abrirIngresoMasivo() {
+  if (!itemsSeleccionados.value.length || auth.isReadOnly) return
+  dialogIngresoMasivo.value = true
+}
+
+function cambiarSeleccionTodos(seleccionado) {
+  itemsSeleccionados.value = seleccionado ? [...itemsSeleccionables.value] : []
 }
 
 function itemEstaSeleccionado(item) {
@@ -199,11 +219,24 @@ async function commitAprobada(item) {
           <div v-if="auth.canWrite && itemsSeleccionados.length" class="acciones-masivas">
             <span>{{ itemsSeleccionados.length }} ítem{{ itemsSeleccionados.length === 1 ? '' : 's' }} seleccionado{{ itemsSeleccionados.length === 1 ? '' : 's' }}</span>
             <Button label="Cambiar estado" icon="pi pi-sync" size="small" @click="abrirCambioMasivo" />
+            <Button label="F. aprox." icon="pi pi-calendar" size="small" severity="secondary" @click="abrirFechaAproxMasiva" />
+            <Button label="Registrar atención" icon="pi pi-plus" size="small" severity="success" @click="abrirIngresoMasivo" />
             <Button label="Limpiar" text severity="secondary" size="small" @click="itemsSeleccionados = []" />
           </div>
 
           <DataTable :value="items" data-key="detalle_id" table-style="min-width: 680px">
             <Column v-if="auth.canWrite" header-style="width: 3rem" body-style="width: 3rem">
+              <template #header>
+                <Checkbox
+                  :model-value="todosSeleccionados"
+                  :indeterminate="seleccionParcial"
+                  :binary="true"
+                  :disabled="!itemsSeleccionables.length"
+                  aria-label="Seleccionar todos los ítems elegibles"
+                  v-tooltip.top="'Seleccionar todos los ítems no atendidos'"
+                  @update:model-value="cambiarSeleccionTodos"
+                />
+              </template>
               <template #body="{ data }">
                 <Checkbox
                   :model-value="itemEstaSeleccionado(data)"
@@ -368,6 +401,16 @@ async function commitAprobada(item) {
   <CambiarEstadoDialog v-model:visible="dialogEstado" :item="itemSeleccionado" />
   <CambiarEstadoMasivoDialog
     v-model:visible="dialogEstadoMasivo"
+    :pedido="pedido"
+    :items="itemsSeleccionados"
+  />
+  <FechaAproxMasivaDialog
+    v-model:visible="dialogFechaAproxMasiva"
+    :pedido="pedido"
+    :items="itemsSeleccionados"
+  />
+  <IngresoMasivoDialog
+    v-model:visible="dialogIngresoMasivo"
     :pedido="pedido"
     :items="itemsSeleccionados"
   />

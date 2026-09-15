@@ -236,6 +236,29 @@ export const useDetallePedidoStore = defineStore('detallePedido', {
       await this._recargarTodo()
     },
 
+    async actualizarFechaAproxItems({ pedidoId, detalleIds, fecha, comentario }) {
+      const { error } = await supabase.rpc('fn_actualizar_fecha_aprox_items', {
+        p_pedido_id: pedidoId,
+        p_detalle_ids: detalleIds,
+        p_fecha: fecha ?? null,
+        p_comentario: comentario?.trim() || null,
+      })
+      if (error) throw error
+      await this._recargarTodo()
+    },
+
+    async registrarIngresosItems({ pedidoId, ingresos, fecha, documento, comentario }) {
+      const { error } = await supabase.rpc('fn_registrar_ingresos_items', {
+        p_pedido_id: pedidoId,
+        p_ingresos: ingresos,
+        p_fecha: fecha ?? null,
+        p_documento: documento?.trim() || null,
+        p_comentario: comentario?.trim() || null,
+      })
+      if (error) throw error
+      await this._recargarTodo()
+    },
+
     async cambiarEstadoItems({ pedidoId, estadoId, detalles, fecha, comentario }) {
       const { error } = await supabase.rpc('fn_cambiar_estado_items', {
         p_pedido_id: pedidoId,
