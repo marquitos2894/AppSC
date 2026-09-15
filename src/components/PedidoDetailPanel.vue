@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useDetallePedidoStore } from '@/stores/detallePedidoStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -15,10 +15,21 @@ const toast = useToast()
 const { visible, pedido, items, historialPedido, loading, estadoPedido } = storeToRefs(detalleStore)
 
 const dialogEstado = ref(false)
+const dialogEstadoMasivo = ref(false)
 const dialogIngreso = ref(false)
 const dialogMovimientos = ref(false)
 const itemSeleccionado = ref(null)
 const aprobadaEdit = ref({})
+const itemsSeleccionados = ref([])
+
+const resumenEstados = computed(() => {
+  const conteos = new Map()
+  for (const item of items.value ?? []) {
+    const nombre = item.estados_catalogo?.nombre ?? 'Sin estado'
+    conteos.set(nombre, (conteos.get(nombre) ?? 0) + 1)
+  }
+  return [...conteos].map(([nombre, cantidad]) => ({ nombre, cantidad }))
+})
 
 watch(
   items,
@@ -26,6 +37,7 @@ watch(
     const mapa = {}
     for (const it of nuevos ?? []) mapa[it.detalle_id] = Number(it.cantidad_aprobada ?? 0)
     aprobadaEdit.value = mapa
+    itemsSeleccionados.value = []
   },
   { immediate: true },
 )
@@ -50,6 +62,26 @@ function esAtendido(item) {
 
 function clickEstado(item) {
   if (!esAtendido(item)) abrirEstado(item)
+}
+
+function abrirCambioMasivo() {
+  if (!itemsSeleccionados.value.length || auth.isReadOnly) return
+  dialogEstadoMasivo.value = true
+}
+
+function itemEstaSeleccionado(item) {
+  return itemsSeleccionados.value.some((seleccionado) => seleccionado.detalle_id === item.detalle_id)
+}
+
+function cambiarSeleccion(item, seleccionado) {
+  if (esAtendido(item)) return
+  if (seleccionado) {
+    if (!itemEstaSeleccionado(item)) itemsSeleccionados.value = [...itemsSeleccionados.value, item]
+    return
+  }
+  itemsSeleccionados.value = itemsSeleccionados.value.filter(
+    (actual) => actual.detalle_id !== item.detalle_id,
+  )
 }
 
 function abrirIngreso(item) {
@@ -147,6 +179,13 @@ async function commitAprobada(item) {
 
           <div v-if="pedido.motivo" class="detalle-motivo">{{ pedido.motivo }}</div>
 
+          <div v-if="resumenEstados.length" class="resumen-estados" aria-label="Resumen de estados de ítems">
+            <span v-for="estado in resumenEstados" :key="estado.nombre" class="resumen-estado-item">
+              <EstadoTag :nombre="estado.nombre" size="sm" />
+              <span class="mono">{{ estado.cantidad }}</span>
+            </span>
+          </div>
+
         </div>
 
         <div class="detalle-section">
@@ -157,7 +196,24 @@ async function commitAprobada(item) {
             </span>
           </h3>
 
+          <div v-if="auth.canWrite && itemsSeleccionados.length" class="acciones-masivas">
+            <span>{{ itemsSeleccionados.length }} ítem{{ itemsSeleccionados.length === 1 ? '' : 's' }} seleccionado{{ itemsSeleccionados.length === 1 ? '' : 's' }}</span>
+            <Button label="Cambiar estado" icon="pi pi-sync" size="small" @click="abrirCambioMasivo" />
+            <Button label="Limpiar" text severity="secondary" size="small" @click="itemsSeleccionados = []" />
+          </div>
+
           <DataTable :value="items" data-key="detalle_id" table-style="min-width: 680px">
+            <Column v-if="auth.canWrite" header-style="width: 3rem" body-style="width: 3rem">
+              <template #body="{ data }">
+                <Checkbox
+                  :model-value="itemEstaSeleccionado(data)"
+                  :binary="true"
+                  :disabled="esAtendido(data)"
+                  :aria-label="esAtendido(data) ? 'Ítem atendido: no seleccionable' : 'Seleccionar ítem'"
+                  @update:model-value="(seleccionado) => cambiarSeleccion(data, seleccionado)"
+                />
+              </template>
+            </Column>
             <Column header="Nro parte" style="width: 110px">
               <template #body="{ data }">
                 <span class="mono cell-num" style="font-size: 12.5px">{{ data.nro_parte || '—' }}</span>
@@ -310,6 +366,44 @@ async function commitAprobada(item) {
   </Drawer>
 
   <CambiarEstadoDialog v-model:visible="dialogEstado" :item="itemSeleccionado" />
+  <CambiarEstadoMasivoDialog
+    v-model:visible="dialogEstadoMasivo"
+    :pedido="pedido"
+    :items="itemsSeleccionados"
+  />
   <IngresoForm v-model:visible="dialogIngreso" :item="itemSeleccionado" />
   <ItemMovimientosDialog v-model:visible="dialogMovimientos" :item="itemSeleccionado" />
 </template>
+
+<style scoped>
+.resumen-estados {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 10px;
+}
+
+.resumen-estado-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.acciones-masivas {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid #d8e5f0;
+  border-radius: 8px;
+  background: #f4f9fd;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.acciones-masivas span { margin-right: auto; }
+</style>
