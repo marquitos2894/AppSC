@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from tempfile import SpooledTemporaryFile
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -10,12 +11,19 @@ from .extractor import extract_purchase_request
 
 app = FastAPI(title="AppSC PDF Extractor")
 
+
+def allowed_origins() -> list[str]:
+    locales = ["http://127.0.0.1:5173", "http://localhost:5173"]
+    produccion = [
+        origen.strip().rstrip("/")
+        for origen in os.getenv("ALLOWED_ORIGINS", "").split(",")
+        if origen.strip()
+    ]
+    return list(dict.fromkeys([*locales, *produccion]))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://127.0.0.1:5173",
-        "http://localhost:5173",
-    ],
+    allow_origins=allowed_origins(),
     allow_methods=["POST", "GET", "OPTIONS"],
     allow_headers=["*"],
 )
