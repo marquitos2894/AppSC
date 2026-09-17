@@ -44,6 +44,7 @@
       style="min-width: 200px"
     />
 
+    <Button v-if="auth.canWrite" label="Compartir" icon="pi pi-link" text @click="dialogEnlacePublico = true" />
     <Button v-if="auth.canWrite" label="Nuevo pedido" icon="pi pi-plus" @click="abrirNuevo" />
   </div>
 
@@ -54,12 +55,12 @@
       @editar="abrirEditar"
       @cambiar-estado="abrirCambiarEstado"
       @historial="abrirHistorial"
-      @autorizar="abrirAutorizar"
       @generar-resumen="abrirResumen"
     />
   </div>
 
   <PedidoDetailPanel />
+  <EnlacePublicoDialog v-model:visible="dialogEnlacePublico" />
   <PedidoResumenDialog
     v-model:visible="dialogResumen"
     :pedido="resumenPedido"
@@ -75,11 +76,6 @@
   <HistorialPedidoDialog
     v-model:visible="dialogHistorial"
     :pedido="pedidoSeleccionado"
-  />
-  <AutorizarPedidoDialog
-    v-model:visible="dialogAutorizar"
-    :pedido="pedidoSeleccionado"
-    @autorizado="alAutorizar"
   />
 </template>
 
@@ -100,8 +96,8 @@ import PedidoDetailPanel from '@/components/PedidoDetailPanel.vue'
 import PedidoFormDialog from '@/components/PedidoFormDialog.vue'
 import CambiarEstadoPedidoDialog from '@/components/CambiarEstadoPedidoDialog.vue'
 import HistorialPedidoDialog from '@/components/HistorialPedidoDialog.vue'
-import AutorizarPedidoDialog from '@/components/AutorizarPedidoDialog.vue'
 import PedidoResumenDialog from '@/components/PedidoResumenDialog.vue'
+import EnlacePublicoDialog from '@/components/EnlacePublicoDialog.vue'
 
 const estadosStore = useEstadosStore()
 const pedidosStore = usePedidosStore()
@@ -118,8 +114,8 @@ const { pedido: resumenPedido, items: resumenItems, estadoPedido: resumenEstado 
 const dialogNuevo = ref(false)
 const dialogCambiarEstado = ref(false)
 const dialogHistorial = ref(false)
-const dialogAutorizar = ref(false)
 const dialogResumen = ref(false)
+const dialogEnlacePublico = ref(false)
 const pedidoSeleccionado = ref(null)
 const pedidoAEditar = ref(null)
 const configurado = isConfigured
@@ -193,26 +189,10 @@ function abrirHistorial(pedido) {
   dialogHistorial.value = true
 }
 
-function abrirAutorizar(pedido) {
-  pedidoSeleccionado.value = pedido
-  dialogAutorizar.value = true
-}
-
 async function abrirResumen(pedido) {
   try {
     await detalleStore.cargar(pedido.pedido_id)
     dialogResumen.value = true
-  } catch (e) {
-    notificarError(e)
-  }
-}
-
-async function alAutorizar() {
-  try {
-    await cargar()
-    if (pedidoSeleccionado.value && detalleStore.pedidoId === pedidoSeleccionado.value.pedido_id) {
-      await detalleStore.cargar(detalleStore.pedidoId)
-    }
   } catch (e) {
     notificarError(e)
   }

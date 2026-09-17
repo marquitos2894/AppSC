@@ -154,12 +154,5 @@ export const usePedidosStore = defineStore('pedidos', {
       if (error) throw error
     },
 
-    async autorizarPedido(pedidoId, fecha) {
-      const { error } = await supabase
-        .from('pedido')
-        .update({ autorizado: fecha })
-        .eq('pedido_id', pedidoId)
-      if (error) throw error
-    },
   },
 })

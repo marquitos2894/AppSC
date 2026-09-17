@@ -31,6 +31,12 @@ const atencionPct = computed(() => {
   return aprobada > 0 ? Math.round((atendida / aprobada) * 100) : 0
 })
 
+const atencionPedidosPct = computed(() => {
+  const total = Number(kpis.value?.total_pedidos ?? 0)
+  const completos = Number(kpis.value?.pedidos_completos ?? 0)
+  return total > 0 ? Math.round((completos / total) * 100) : 0
+})
+
 const pieData = computed(() => ({
   labels: porEstado.value.map((e) => e.estado),
   datasets: [
@@ -73,7 +79,8 @@ const kpiCards = computed(() => [
   { label: 'Pendientes', value: kpis.value?.pedidos_pendientes ?? 0, tone: 'pendiente' },
   { label: 'Parciales', value: kpis.value?.pedidos_parciales ?? 0, tone: 'parcial' },
   { label: 'Completos', value: kpis.value?.pedidos_completos ?? 0, tone: 'completo' },
-  { label: 'Atención', value: `${atencionPct.value}%`, tone: 'atencion' },
+  { label: 'Atención por unidades', value: `${atencionPct.value}%`, tone: 'atencion' },
+  { label: 'Atención por pedidos', value: `${atencionPedidosPct.value}%`, tone: 'atencion-pedidos' },
   { label: 'Ítems en excepción', value: kpis.value?.items_excepcion ?? 0, tone: 'excepcion' },
 ])
 
@@ -100,7 +107,7 @@ watch(
   <div class="page-content">
     <div v-if="loading && !kpis" class="flex flex-column gap-3">
       <div class="kpi-grid">
-        <Skeleton v-for="n in 6" :key="n" height="84px" />
+        <Skeleton v-for="n in 7" :key="n" height="84px" />
       </div>
       <Skeleton height="300px" />
     </div>
@@ -210,6 +217,7 @@ watch(
 .kpi-parcial .kpi-value { color: #b07a1f; }
 .kpi-completo .kpi-value { color: var(--atendido); }
 .kpi-atencion .kpi-value { color: var(--accent-500); }
+.kpi-atencion-pedidos .kpi-value { color: #6a5acd; }
 .kpi-excepcion .kpi-value { color: var(--rej); }
 
 .charts-grid {

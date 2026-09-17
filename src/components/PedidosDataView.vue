@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { formatQty, formatDate } from '@/utils/format'
 import { estiloGrupoCosto } from '@/utils/grupoCosto'
 
-const emit = defineEmits(['nuevo', 'eliminar', 'editar', 'cambiar-estado', 'historial', 'autorizar', 'generar-resumen'])
+const emit = defineEmits(['nuevo', 'eliminar', 'editar', 'cambiar-estado', 'historial', 'generar-resumen'])
 
 const pedidosStore = usePedidosStore()
 const detalleStore = useDetallePedidoStore()
@@ -38,10 +38,6 @@ function contador(items) {
 
 function hayExcepciones(pedido) {
   return pedido.items_observados > 0 || pedido.items_rechazados > 0
-}
-
-function autorizacion(pedido) {
-  return pedido.autorizado ? `Autorizado ${formatDate(pedido.autorizado, true)}` : 'Sin autorización'
 }
 
 function claseAtencionPedido(valor) {
@@ -157,15 +153,6 @@ function abrirCambioEstado(evento, pedido) {
             />
 
             <span
-              class="auth-badge"
-              :class="pedido.autorizado ? 'auth-ok' : 'auth-none'"
-              :title="autorizacion(pedido)"
-            >
-              <i :class="pedido.autorizado ? 'pi pi-lock' : 'pi pi-lock-open'"></i>
-              {{ pedido.autorizado ? 'Autorizado' : 'Sin autorización' }}
-            </span>
-
-            <span
               v-if="pedido.estado_atencion"
               class="atencion-badge"
               :class="claseAtencionPedido(pedido.estado_atencion)"
@@ -204,17 +191,6 @@ function abrirCambioEstado(evento, pedido) {
                 v-tooltip.top="'Editar pedido'"
                 @click.stop="emit('editar', pedido)"
               />
-              <Button
-                v-if="auth.canWrite"
-                icon="pi pi-lock-open"
-                text
-                rounded
-                size="small"
-                aria-label="Autorizar"
-                v-tooltip.top="'Autorizar'"
-                @click.stop="emit('autorizar', pedido)"
-              />
- 
               <Button
                 v-if="auth.canWrite"
                 icon="pi pi-trash"
@@ -282,15 +258,6 @@ function abrirCambioEstado(evento, pedido) {
             </span>
 
             <span
-              class="auth-badge"
-              :class="pedido.autorizado ? 'auth-ok' : 'auth-none'"
-              :title="autorizacion(pedido)"
-            >
-              <i :class="pedido.autorizado ? 'pi pi-lock' : 'pi pi-lock-open'"></i>
-              {{ pedido.autorizado ? 'Autorizado' : 'Sin autorización' }}
-            </span>
-
-            <span
               v-if="pedido.estado_atencion"
               class="atencion-badge"
               :class="claseAtencionPedido(pedido.estado_atencion)"
@@ -318,16 +285,6 @@ function abrirCambioEstado(evento, pedido) {
                   aria-label="Generar resumen"
                   v-tooltip.top="'Generar resumen para correo'"
                   @click.stop="emit('generar-resumen', pedido)"
-                />
-                <Button
-                  v-if="auth.canWrite"
-                  icon="pi pi-lock-open"
-                  text
-                  rounded
-                  size="small"
-                  aria-label="Autorizar"
-                  v-tooltip.top="'Autorizar'"
-                  @click.stop="emit('autorizar', pedido)"
                 />
                 <Button
                   v-if="puedeEditar(pedido)"

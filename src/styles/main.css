@@ -421,27 +421,6 @@ body {
   font-weight: 500;
 }
 
-.auth-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11.5px;
-  font-weight: 600;
-  padding: 2px 9px;
-  border-radius: 999px;
-  white-space: nowrap;
-}
-
-.auth-badge.auth-ok {
-  color: var(--atendido);
-  background: rgba(46, 139, 116, 0.12);
-}
-
-.auth-badge.auth-none {
-  color: #8b9cad;
-  background: rgba(139, 156, 173, 0.12);
-}
-
 /* ----------------------------------------------------------------------------
    EstadoTag
    ---------------------------------------------------------------------------- */

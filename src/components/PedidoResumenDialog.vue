@@ -20,6 +20,7 @@ const loading = ref(false)
 const vistaActual = ref('vista')
 const comentariosIncidencias = ref(new Map())
 const atencionesPorItem = ref(new Map())
+const secciones = ref({ atendidos: true, pendientes: true, incidencias: true, enProceso: true })
 
 function esIncidencia(item) {
   return ['Observado', 'Rechazado'].includes(item?.estados_catalogo?.nombre)
@@ -47,11 +48,23 @@ const pendientes = computed(() =>
 const atendidos = computed(() =>
   props.items.filter((item) => {
     const aprobada = Number(item.cantidad_aprobada ?? 0)
-    return aprobada > 0 && Number(item.cantidad_atendida ?? 0) >= aprobada
+    return !esIncidencia(item) && aprobada > 0 && Number(item.cantidad_atendida ?? 0) >= aprobada
   }),
 )
 
 const incidencias = computed(() => props.items.filter(esIncidencia))
+
+const enProceso = computed(() =>
+  props.items.filter((item) =>
+    !esIncidencia(item) &&
+    !atendidos.value.includes(item) &&
+    !pendientes.value.includes(item),
+  ),
+)
+
+function alternarSeccion(seccion) {
+  secciones.value[seccion] = !secciones.value[seccion]
+}
 
 function fechaAprox(item) {
   return item.fecha_aprox_atencion ? formatDate(item.fecha_aprox_atencion) : 'Fecha por confirmar'
@@ -120,6 +133,17 @@ function construirResumen(comentarios = new Map()) {
     }
   } else {
     lineas.push('- No se registran repuestos observados o rechazados.')
+  }
+
+  lineas.push('', 'Repuestos en proceso:')
+  if (enProceso.value.length) {
+    for (const item of enProceso.value) {
+      lineas.push(
+        `- ${descripcionItem(item)}: solicitada ${formatQty(item.cantidad_solicitada)}. Estado: ${item.estados_catalogo?.nombre || 'No registrado'}.`,
+      )
+    }
+  } else {
+    lineas.push('- No se registran repuestos en proceso.')
   }
 
   return lineas.join('\n')
@@ -191,6 +215,7 @@ watch(
   (visible) => {
     if (visible) {
       vistaActual.value = 'vista'
+      secciones.value = { atendidos: true, pendientes: true, incidencias: true, enProceso: true }
       generarResumen()
     }
   },
@@ -202,7 +227,7 @@ watch(
     :visible="visible"
     modal
     header="Resumen para correo"
-    :style="{ width: 'min(850px, calc(100vw - 2rem))' }"
+    :style="{ width: 'min(900px, calc(100vw - 3rem))' }"
     @update:visible="emit('update:visible', $event)"
   >
     <div class="resumen-dialogo">
@@ -253,17 +278,71 @@ watch(
         </div>
 
         <div v-if="vistaActual === 'vista'" class="resumen-vista" role="tabpanel">
+          <section class="resumen-seccion" aria-labelledby="en-proceso-titulo">
+            <div class="resumen-seccion-cabecera">
+              <div>
+                <h3 id="en-proceso-titulo"><i class="pi pi-list" aria-hidden="true"></i> Repuestos en proceso</h3>
+                <p>Ítems que aún no fueron aprobados, observados, rechazados ni atendidos.</p>
+              </div>
+              <div class="resumen-seccion-acciones">
+                <span class="resumen-contador">{{ enProceso.length }}</span>
+                <Button
+                  :icon="secciones.enProceso ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+                  text rounded size="small"
+                  :aria-label="secciones.enProceso ? 'Contraer repuestos en proceso' : 'Expandir repuestos en proceso'"
+                  @click="alternarSeccion('enProceso')"
+                />
+              </div>
+            </div>
+
+            <DataTable
+              v-if="secciones.enProceso && enProceso.length"
+              :value="enProceso"
+              class="resumen-tabla"
+              table-style="min-width: 650px"
+            >
+              <Column header="Repuesto">
+                <template #body="{ data }">
+                  <div class="repuesto-cell">
+                    <i class="pi pi-box" aria-hidden="true"></i>
+                    <div>
+                      <span class="mono">{{ data.nro_parte || 'Sin nro. de parte' }}</span>
+                      <span>{{ data.material || 'Sin descripción' }}</span>
+                    </div>
+                  </div>
+                </template>
+              </Column>
+              <Column header="Solicitado" style="width: 110px">
+                <template #body="{ data }"><span class="resumen-cantidad">{{ formatQty(data.cantidad_solicitada) }}</span></template>
+              </Column>
+              <Column header="Estado" style="width: 150px">
+                <template #body="{ data }"><EstadoTag :nombre="data.estados_catalogo?.nombre || 'No registrado'" size="sm" /></template>
+              </Column>
+            </DataTable>
+            <div v-else-if="secciones.enProceso" class="resumen-vacio">
+              <i class="pi pi-check-circle" aria-hidden="true"></i>
+              <span>No se registran repuestos en proceso.</span>
+            </div>
+          </section>
           <section class="resumen-seccion" aria-labelledby="atendidos-titulo">
             <div class="resumen-seccion-cabecera">
               <div>
                 <h3 id="atendidos-titulo"><i class="pi pi-check-circle resumen-icono-atendido" aria-hidden="true"></i> Repuestos atendidos</h3>
                 <p>Ítems cuya cantidad aprobada ya fue cubierta por completo.</p>
               </div>
-              <span class="resumen-contador resumen-contador--atendido">{{ atendidos.length }}</span>
+              <div class="resumen-seccion-acciones">
+                <span class="resumen-contador resumen-contador--atendido">{{ atendidos.length }}</span>
+                <Button
+                  :icon="secciones.atendidos ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+                  text rounded size="small"
+                  :aria-label="secciones.atendidos ? 'Contraer repuestos atendidos' : 'Expandir repuestos atendidos'"
+                  @click="alternarSeccion('atendidos')"
+                />
+              </div>
             </div>
 
             <DataTable
-              v-if="atendidos.length"
+              v-if="secciones.atendidos && atendidos.length"
               :value="atendidos"
               class="resumen-tabla"
               table-style="min-width: 930px"
@@ -300,7 +379,7 @@ watch(
                 </template>
               </Column>
             </DataTable>
-            <div v-else class="resumen-vacio">
+            <div v-else-if="secciones.atendidos" class="resumen-vacio">
               <i class="pi pi-check-circle" aria-hidden="true"></i>
               <span>No se registran repuestos atendidos.</span>
             </div>
@@ -312,11 +391,19 @@ watch(
                 <h3 id="pendientes-titulo"><i class="pi pi-clock" aria-hidden="true"></i> Pendientes de atención</h3>
                 <p>Ítems aprobados que todavía requieren entrega.</p>
               </div>
-              <span class="resumen-contador">{{ pendientes.length }}</span>
+              <div class="resumen-seccion-acciones">
+                <span class="resumen-contador">{{ pendientes.length }}</span>
+                <Button
+                  :icon="secciones.pendientes ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+                  text rounded size="small"
+                  :aria-label="secciones.pendientes ? 'Contraer pendientes de atención' : 'Expandir pendientes de atención'"
+                  @click="alternarSeccion('pendientes')"
+                />
+              </div>
             </div>
 
             <DataTable
-              v-if="pendientes.length"
+              v-if="secciones.pendientes && pendientes.length"
               :value="pendientes"
               class="resumen-tabla"
               table-style="min-width: 750px"
@@ -351,7 +438,7 @@ watch(
                 </template>
               </Column>
             </DataTable>
-            <div v-else class="resumen-vacio">
+            <div v-else-if="secciones.pendientes" class="resumen-vacio">
               <i class="pi pi-check-circle" aria-hidden="true"></i>
               <span>No hay repuestos pendientes de atención.</span>
             </div>
@@ -363,11 +450,19 @@ watch(
                 <h3 id="incidencias-titulo"><i class="pi pi-exclamation-triangle" aria-hidden="true"></i> Observados y rechazados</h3>
                 <p>Ítems que requieren una aclaración en la respuesta.</p>
               </div>
-              <span class="resumen-contador resumen-contador--incidencia">{{ incidencias.length }}</span>
+              <div class="resumen-seccion-acciones">
+                <span class="resumen-contador resumen-contador--incidencia">{{ incidencias.length }}</span>
+                <Button
+                  :icon="secciones.incidencias ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+                  text rounded size="small"
+                  :aria-label="secciones.incidencias ? 'Contraer observados y rechazados' : 'Expandir observados y rechazados'"
+                  @click="alternarSeccion('incidencias')"
+                />
+              </div>
             </div>
 
             <DataTable
-              v-if="incidencias.length"
+              v-if="secciones.incidencias && incidencias.length"
               :value="incidencias"
               class="resumen-tabla"
               table-style="min-width: 780px"
@@ -396,11 +491,13 @@ watch(
                 <template #body="{ data }"><span class="resumen-motivo">{{ comentarioIncidencia(data) }}</span></template>
               </Column>
             </DataTable>
-            <div v-else class="resumen-vacio">
+            <div v-else-if="secciones.incidencias" class="resumen-vacio">
               <i class="pi pi-check-circle" aria-hidden="true"></i>
               <span>No se registran repuestos observados o rechazados.</span>
             </div>
           </section>
+
+
         </div>
 
         <div v-else class="resumen-editor" role="tabpanel">
@@ -497,6 +594,8 @@ watch(
   gap: 16px;
   margin-bottom: 10px;
 }
+
+.resumen-seccion-acciones { display: flex; align-items: center; gap: 4px; }
 
 .resumen-seccion-cabecera h3,
 .resumen-editor-cabecera h3 { gap: 8px; font-size: 13px; }

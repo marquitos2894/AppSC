@@ -65,10 +65,11 @@ export const useDetallePedidoStore = defineStore('detallePedido', {
         ])
         if (p.error) throw p.error
         if (it.error) throw it.error
-        if (h.error) throw h.error
         this.pedido = p.data
         this.items = it.data
-        this.historialPedido = h.data
+        // El historial es complementario: una restricción de lectura no debe impedir
+        // que un usuario de solo lectura vea el pedido y sus ítems.
+        this.historialPedido = h.error ? [] : h.data
       } finally {
         this.loading = false
       }

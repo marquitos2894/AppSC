@@ -4,6 +4,7 @@ import PedidosView from '@/views/PedidosView.vue'
 import ItemsView from '@/views/ItemsView.vue'
 import DashboardView from '@/views/DashboardView.vue'
 import LoginView from '@/views/LoginView.vue'
+import PublicPedidosView from '@/views/PublicPedidosView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -30,6 +31,11 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: LoginView,
+    },
+    {
+      path: '/publico/:token',
+      name: 'pedidos-publicos',
+      component: PublicPedidosView,
     },
   ],
 })
