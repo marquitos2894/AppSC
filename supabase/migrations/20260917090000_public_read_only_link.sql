@@ -97,11 +97,11 @@ begin
   select
     p.pedido_id,
     p.fecha_emision,
-    p.motivo,
-    p.grupo_costo,
-    p.nro_sc,
-    p.estado_atencion,
-    ec.nombre,
+    p.motivo::text,
+    p.grupo_costo::text,
+    p.nro_sc::text,
+    p.estado_atencion::text,
+    ec.nombre::text,
     count(d.detalle_id) filter (where dec.nombre = 'Observado'),
     count(d.detalle_id) filter (where dec.nombre = 'Rechazado'),
     count(d.detalle_id)
@@ -138,15 +138,15 @@ begin
   return query
   select
     d.detalle_id,
-    d.nro_parte,
-    d.material,
-    d.equipo,
+    d.nro_parte::text,
+    d.material::text,
+    d.equipo::text,
     d.cantidad_solicitada,
     d.cantidad_aprobada,
     d.cantidad_atendida,
     d.fecha_aprox_atencion,
-    d.estado_atencion,
-    ec.nombre
+    d.estado_atencion::text,
+    ec.nombre::text
   from public.detalle_pedido d
   join public.estados_catalogo ec on ec.estado_id = d.estado_actual_id
   join public.pedido p on p.pedido_id = d.pedido_id
