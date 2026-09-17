@@ -29,7 +29,7 @@ watch(
     } else {
       filtroGlobalStore.limpiar()
     }
-    if (!authed && router.currentRoute.value.name !== 'login') {
+    if (!authed && router.currentRoute.value.meta.requiresAuth) {
       router.push({ name: 'login' })
     }
   },
