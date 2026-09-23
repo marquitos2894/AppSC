@@ -20,6 +20,7 @@ const grupoCosto = computed({
   get: () => filtroGlobalStore.grupoCosto,
   set: (valor) => filtroGlobalStore.establecerGrupoCosto(valor),
 })
+const esRutaPublica = computed(() => router.currentRoute.value.path.startsWith('/publico'))
 
 watch(
   () => auth.isAuthenticated,
@@ -40,6 +41,11 @@ function cambiarGrupoCosto() {
   detalleStore.cerrar()
 }
 
+function restablecerGrupoCosto() {
+  filtroGlobalStore.establecerGrupoCosto(null)
+  detalleStore.cerrar()
+}
+
 async function salir() {
   try {
     await auth.signOut()
@@ -51,7 +57,7 @@ async function salir() {
 </script>
 
 <template>
-  <template v-if="auth.isAuthenticated">
+  <template v-if="auth.isAuthenticated && !esRutaPublica">
     <div class="app-shell" :class="{ 'rail-collapsed': railCollapsed }">
       <aside class="app-rail">
         <div class="app-rail-top">
@@ -134,6 +140,15 @@ async function salir() {
             :loading="cargandoGruposCosto"
             class="global-filter-select"
             @change="cambiarGrupoCosto"
+          />
+          <Button
+            label="Restablecer grupo"
+            icon="pi pi-filter-slash"
+            severity="secondary"
+            text
+            size="small"
+            :disabled="!grupoCosto"
+            @click="restablecerGrupoCosto"
           />
           <Tag v-if="auth.isReadOnly" value="Modo lectura" icon="pi pi-eye" severity="info" />
         </div>

@@ -9,6 +9,7 @@ const props = defineProps({
   items: { type: Array, default: () => [] },
   estadoPedido: { type: String, default: '' },
   visible: { type: Boolean, default: false },
+  datosComplementarios: { type: Boolean, default: true },
 })
 const emit = defineEmits(['update:visible'])
 
@@ -18,7 +19,7 @@ const toast = useToast()
 const texto = ref('')
 const loading = ref(false)
 const vistaActual = ref('vista')
-const comentariosIncidencias = ref(new Map())
+const comentariosPorItem = ref(new Map())
 const atencionesPorItem = ref(new Map())
 const secciones = ref({ atendidos: true, pendientes: true, incidencias: true, enProceso: true })
 
@@ -70,8 +71,12 @@ function fechaAprox(item) {
   return item.fecha_aprox_atencion ? formatDate(item.fecha_aprox_atencion) : 'Fecha por confirmar'
 }
 
-function comentarioIncidencia(item) {
-  return comentariosIncidencias.value.get(item.detalle_id) || 'Sin comentario registrado'
+function estadoActual(item) {
+  return item.estados_catalogo?.nombre || 'No registrado'
+}
+
+function comentarioItem(item) {
+  return comentariosPorItem.value.get(item.detalle_id) || item.comentario || 'Sin comentario registrado'
 }
 
 function atencionesItem(item) {
@@ -86,7 +91,71 @@ function etiquetaAtencionItem(ingreso) {
   return partes.join(' · ')
 }
 
-function construirResumen(comentarios = new Map()) {
+function escaparHtml(valor) {
+  return String(valor ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
+}
+
+function detalleCorreo(item, tipo) {
+  if (tipo === 'atendidos') {
+    const ingresos = atencionesItem(item)
+    return ingresos.length
+      ? ingresos.map((ingreso) => etiquetaAtencionItem(ingreso)).join('\n')
+      : 'Sin detalle registrado'
+  }
+  if (tipo === 'pendientes') return `F. aprox.: ${fechaAprox(item)}`
+  if (tipo === 'incidencias') return 'Requiere aclaración'
+  return 'En seguimiento'
+}
+
+function tablaCorreo(items, titulo, tipo, color = '#3b6e8f') {
+  const filas = items.length
+    ? items.map((item) => `
+        <tr>
+          <td style="padding:8px 9px;border-top:1px solid #e5ebef;vertical-align:top;word-break:break-word"><strong style="color:#1e2a38">${escaparHtml(item.nro_parte || 'Sin nro. de parte')}</strong><br><span style="color:#526575">${escaparHtml(item.material || 'Sin descripción')}</span></td>
+          <td style="padding:8px 5px;border-top:1px solid #e5ebef;text-align:center;vertical-align:top">${escaparHtml(formatQty(item.cantidad_solicitada))}</td>
+          <td style="padding:8px 5px;border-top:1px solid #e5ebef;text-align:center;vertical-align:top">${escaparHtml(formatQty(item.cantidad_aprobada))}</td>
+          <td style="padding:8px 5px;border-top:1px solid #e5ebef;text-align:center;vertical-align:top">${escaparHtml(formatQty(item.cantidad_atendida))}</td>
+          <td style="padding:8px 7px;border-top:1px solid #e5ebef;vertical-align:top"><span style="display:inline-block;padding:3px 7px;border-radius:999px;background:${color}18;color:${color};font-weight:700;font-size:11px">${escaparHtml(estadoActual(item))}</span></td>
+          <td style="padding:8px 9px;border-top:1px solid #e5ebef;vertical-align:top;word-break:break-word">${escaparHtml(comentarioItem(item))}</td>
+          <td style="padding:8px 9px;border-top:1px solid #e5ebef;vertical-align:top;word-break:break-word">${escaparHtml(detalleCorreo(item, tipo)).replaceAll('\n', '<br>')}</td>
+        </tr>`).join('')
+    : `<tr><td colspan="7" style="padding:12px;text-align:center;color:#718096">Sin ítems en esta sección.</td></tr>`
+
+  return `
+    <section style="margin:20px 0">
+      <div style="padding:10px 12px;background:${color}12;border-left:3px solid ${color};font-size:13px;font-weight:700;color:#1e2a38">${escaparHtml(titulo)} <span style="color:#64748b;font-weight:600">(${items.length})</span></div>
+      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="width:100%;border-collapse:collapse;table-layout:fixed;font-family:Arial,sans-serif;font-size:12px;color:#334155">
+        <thead><tr style="background:#f7fafc;color:#526575;font-size:10px;text-transform:uppercase;letter-spacing:.04em">
+          <th align="left" style="padding:8px 9px;width:25%">Repuesto</th><th style="padding:8px 5px;width:7%">Solic.</th><th style="padding:8px 5px;width:7%">Aprob.</th><th style="padding:8px 5px;width:7%">Atend.</th><th align="left" style="padding:8px 7px;width:13%">Estado</th><th align="left" style="padding:8px 9px;width:20%">Comentario</th><th align="left" style="padding:8px 9px;width:21%">Detalle</th>
+        </tr></thead><tbody>${filas}</tbody>
+      </table>
+    </section>`
+}
+
+function construirCorreoHtml() {
+  if (!props.pedido) return ''
+  return `<div style="max-width:980px;margin:0 auto;padding:24px;background:#f5f8fa;font-family:Arial,sans-serif;color:#334155">
+    <div style="padding:20px 22px;background:#1e2a38;color:#fff;border-radius:10px 10px 0 0">
+      <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#b9d0df">AppSC · Resumen de pedido</div>
+      <div style="margin-top:7px;font-size:22px;font-weight:700">${escaparHtml(codigoSc(props.pedido.nro_sc))}</div>
+      <div style="margin-top:5px;color:#dce8ef;font-size:13px">${escaparHtml(props.pedido.motivo || 'Sin motivo registrado')}</div>
+      <div style="margin-top:14px;font-size:12px"><span style="display:inline-block;margin-right:10px;padding:4px 8px;border-radius:999px;background:#ffffff20">Estado: ${escaparHtml(props.estadoPedido || 'No registrado')}</span><span style="display:inline-block;padding:4px 8px;border-radius:999px;background:#ffffff20">Atención: ${escaparHtml(etiquetaAtencion(props.pedido.estado_atencion))}</span></div>
+    </div>
+    <div style="padding:4px 22px 22px;background:#fff;border:1px solid #dce6ec;border-top:0;border-radius:0 0 10px 10px">
+      ${tablaCorreo(enProceso.value, 'Repuestos en proceso', 'proceso', '#3b6e8f')}
+      ${tablaCorreo(atendidos.value, 'Repuestos atendidos', 'atendidos', '#2e8b74')}
+      ${tablaCorreo(pendientes.value, 'Pendientes de atención', 'pendientes', '#b07a1f')}
+      ${tablaCorreo(incidencias.value, 'Observados y rechazados', 'incidencias', '#d97706')}
+    </div>
+  </div>`
+}
+
+function construirResumen() {
   if (!props.pedido) return ''
 
   const lineas = [
@@ -104,7 +173,7 @@ function construirResumen(comentarios = new Map()) {
         ? atenciones.map((ingreso) => etiquetaAtencionItem(ingreso)).join(' | ')
         : 'Sin detalle de atención registrado'
       lineas.push(
-        `- ${descripcionItem(item)}: solicitada ${formatQty(item.cantidad_solicitada)}. Aprobada ${formatQty(item.cantidad_aprobada)}. Atendida ${formatQty(item.cantidad_atendida)}. Detalle de atención: ${detalle}.`,
+        `- ${descripcionItem(item)}: solicitada ${formatQty(item.cantidad_solicitada)}. Aprobada ${formatQty(item.cantidad_aprobada)}. Atendida ${formatQty(item.cantidad_atendida)}. Estado actual: ${estadoActual(item)}. Comentario: ${comentarioItem(item)}. Detalle de atención: ${detalle}.`,
       )
     }
   } else {
@@ -116,7 +185,7 @@ function construirResumen(comentarios = new Map()) {
   if (pendientes.value.length) {
     for (const item of pendientes.value) {
       lineas.push(
-        `- ${descripcionItem(item)}: solicitada ${formatQty(item.cantidad_solicitada)}. Aprobada ${formatQty(item.cantidad_aprobada)}. Atendida ${formatQty(item.cantidad_atendida)}. Pendiente ${formatQty(detalleStore.pendiente(item))}. Fecha aproximada de atención: ${fechaAprox(item)}.`,
+        `- ${descripcionItem(item)}: solicitada ${formatQty(item.cantidad_solicitada)}. Aprobada ${formatQty(item.cantidad_aprobada)}. Atendida ${formatQty(item.cantidad_atendida)}. Pendiente ${formatQty(detalleStore.pendiente(item))}. Estado actual: ${estadoActual(item)}. Comentario: ${comentarioItem(item)}. Fecha aproximada de atención: ${fechaAprox(item)}.`,
       )
     }
   } else {
@@ -126,9 +195,8 @@ function construirResumen(comentarios = new Map()) {
   lineas.push('', 'Repuestos observados o rechazados:')
   if (incidencias.value.length) {
     for (const item of incidencias.value) {
-      const comentario = comentarios.get(item.detalle_id) || 'Sin comentario registrado'
       lineas.push(
-        `- ${descripcionItem(item)}: solicitada ${formatQty(item.cantidad_solicitada)}. Aprobada ${formatQty(item.cantidad_aprobada)}. ${item.estados_catalogo?.nombre}. Motivo: ${comentario}.`,
+        `- ${descripcionItem(item)}: solicitada ${formatQty(item.cantidad_solicitada)}. Aprobada ${formatQty(item.cantidad_aprobada)}. Estado actual: ${estadoActual(item)}. Comentario: ${comentarioItem(item)}.`,
       )
     }
   } else {
@@ -139,7 +207,7 @@ function construirResumen(comentarios = new Map()) {
   if (enProceso.value.length) {
     for (const item of enProceso.value) {
       lineas.push(
-        `- ${descripcionItem(item)}: solicitada ${formatQty(item.cantidad_solicitada)}. Estado: ${item.estados_catalogo?.nombre || 'No registrado'}.`,
+        `- ${descripcionItem(item)}: solicitada ${formatQty(item.cantidad_solicitada)}. Estado actual: ${estadoActual(item)}. Comentario: ${comentarioItem(item)}.`,
       )
     }
   } else {
@@ -153,27 +221,32 @@ async function generarResumen() {
   if (!props.pedido) return
   loading.value = true
   texto.value = ''
-  comentariosIncidencias.value = new Map()
+  comentariosPorItem.value = new Map()
   atencionesPorItem.value = new Map()
+  if (!props.datosComplementarios) {
+    texto.value = construirResumen()
+    loading.value = false
+    return
+  }
   try {
     const [historialResult, atencionesResult] = await Promise.allSettled([
-      detalleStore.fetchComentariosIncidencias(incidencias.value.map((item) => item.detalle_id)),
+      detalleStore.fetchComentariosIncidencias(props.items.map((item) => item.detalle_id)),
       detalleStore.fetchIngresosItems(atendidos.value.map((item) => item.detalle_id)),
     ])
     const historial = historialResult.status === 'fulfilled' ? historialResult.value : []
     const atenciones = atencionesResult.status === 'fulfilled' ? atencionesResult.value : {}
     const comentarios = new Map()
 
-    for (const item of incidencias.value) {
+    for (const item of props.items) {
       const movimiento = historial.find(
         (registro) =>
           registro.detalle_id === item.detalle_id && registro.estado_id === item.estado_actual_id,
       )
       if (movimiento?.comentario?.trim()) comentarios.set(item.detalle_id, movimiento.comentario.trim())
     }
-    comentariosIncidencias.value = comentarios
+    comentariosPorItem.value = comentarios
     atencionesPorItem.value = new Map(Object.entries(atenciones).map(([id, values]) => [Number(id), values]))
-    texto.value = construirResumen(comentarios)
+    texto.value = construirResumen()
     if (historialResult.status === 'rejected' || atencionesResult.status === 'rejected') {
       toast.add({
         severity: 'warn',
@@ -210,6 +283,24 @@ async function copiarResumen() {
   }
 }
 
+async function copiarCorreoConFormato() {
+  try {
+    if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
+      throw new Error('Portapapeles HTML no disponible')
+    }
+    const html = construirCorreoHtml()
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([texto.value], { type: 'text/plain' }),
+      }),
+    ])
+    toast.add({ severity: 'success', summary: 'Correo con formato copiado', detail: 'Pégalo directamente en Exchange.', life: 3500 })
+  } catch (error) {
+    toast.add({ severity: 'warn', summary: 'No se pudo copiar el formato', detail: 'Usa “Copiar texto” como alternativa.', life: 6000 })
+  }
+}
+
 watch(
   () => props.visible,
   (visible) => {
@@ -227,7 +318,7 @@ watch(
     :visible="visible"
     modal
     header="Resumen para correo"
-    :style="{ width: 'min(900px, calc(100vw - 3rem))' }"
+    :style="{ width: 'min(1100px, calc(100vw - 3rem))' }"
     @update:visible="emit('update:visible', $event)"
   >
     <div class="resumen-dialogo">
@@ -299,9 +390,9 @@ watch(
               v-if="secciones.enProceso && enProceso.length"
               :value="enProceso"
               class="resumen-tabla"
-              table-style="min-width: 650px"
+              table-style="width: 100%; table-layout: fixed"
             >
-              <Column header="Repuesto">
+              <Column header="Repuesto" style="width: 42%">
                 <template #body="{ data }">
                   <div class="repuesto-cell">
                     <i class="pi pi-box" aria-hidden="true"></i>
@@ -312,11 +403,13 @@ watch(
                   </div>
                 </template>
               </Column>
-              <Column header="Solicitado" style="width: 110px">
+              <Column header="Solicitado" header-class="columna-numerica" body-class="columna-numerica" style="width: 18%">
                 <template #body="{ data }"><span class="resumen-cantidad">{{ formatQty(data.cantidad_solicitada) }}</span></template>
               </Column>
-              <Column header="Estado" style="width: 150px">
-                <template #body="{ data }"><EstadoTag :nombre="data.estados_catalogo?.nombre || 'No registrado'" size="sm" /></template>
+              <Column header="Estado" style="width: 40%">
+                <template #body="{ data }">
+                  <span v-tooltip.top="`Comentario: ${comentarioItem(data)}`"><EstadoTag :nombre="estadoActual(data)" size="sm" /></span>
+                </template>
               </Column>
             </DataTable>
             <div v-else-if="secciones.enProceso" class="resumen-vacio">
@@ -345,9 +438,9 @@ watch(
               v-if="secciones.atendidos && atendidos.length"
               :value="atendidos"
               class="resumen-tabla"
-              table-style="min-width: 930px"
+              table-style="width: 100%; table-layout: fixed"
             >
-              <Column header="Repuesto">
+              <Column header="Repuesto" style="width: 31%">
                 <template #body="{ data }">
                   <div class="repuesto-cell">
                     <i class="pi pi-box" aria-hidden="true"></i>
@@ -358,16 +451,21 @@ watch(
                   </div>
                 </template>
               </Column>
-              <Column header="Solic." style="width: 88px">
+              <Column header="Solic." header-class="columna-numerica" body-class="columna-numerica" style="width: 8%">
                 <template #body="{ data }"><span class="resumen-cantidad">{{ formatQty(data.cantidad_solicitada) }}</span></template>
               </Column>
-              <Column header="Aprob." header-class="columna-aprobada" style="width: 88px">
+              <Column header="Aprob." header-class="columna-aprobada columna-numerica" body-class="columna-numerica" style="width: 8%">
                 <template #body="{ data }"><span class="resumen-cantidad resumen-cantidad--aprobada">{{ formatQty(data.cantidad_aprobada) }}</span></template>
               </Column>
-              <Column header="Atend." header-class="columna-atendida" style="width: 88px">
+              <Column header="Atend." header-class="columna-atendida columna-numerica" body-class="columna-numerica" style="width: 8%">
                 <template #body="{ data }"><span class="resumen-cantidad resumen-cantidad--atendida">{{ formatQty(data.cantidad_atendida) }}</span></template>
               </Column>
-              <Column header="Detalle de atención" style="min-width: 250px">
+              <Column header="Estado" style="width: 16%">
+                <template #body="{ data }">
+                  <span v-tooltip.top="`Comentario: ${comentarioItem(data)}`"><EstadoTag :nombre="estadoActual(data)" size="sm" /></span>
+                </template>
+              </Column>
+              <Column header="Detalle de atención" style="width: 29%">
                 <template #body="{ data }">
                   <div class="atencion-detalle-cell">
                     <span v-for="ingreso in atencionesItem(data)" :key="ingreso.ingreso_id">
@@ -406,9 +504,9 @@ watch(
               v-if="secciones.pendientes && pendientes.length"
               :value="pendientes"
               class="resumen-tabla"
-              table-style="min-width: 750px"
+              table-style="width: 100%; table-layout: fixed"
             >
-              <Column header="Repuesto">
+              <Column header="Repuesto" style="width: 30%">
                 <template #body="{ data }">
                   <div class="repuesto-cell">
                     <i class="pi pi-box" aria-hidden="true"></i>
@@ -419,18 +517,23 @@ watch(
                   </div>
                 </template>
               </Column>
-              <Column header="Solic." style="width: 88px">
+              <Column header="Solic." header-class="columna-numerica" body-class="columna-numerica" style="width: 8%">
                 <template #body="{ data }">
                   <span class="resumen-cantidad">{{ formatQty(data.cantidad_solicitada) }}</span>
                 </template>
               </Column>
-              <Column header="Aprob." header-class="columna-aprobada" style="width: 88px">
+              <Column header="Aprob." header-class="columna-aprobada columna-numerica" body-class="columna-numerica" style="width: 8%">
                 <template #body="{ data }"><span class="resumen-cantidad resumen-cantidad--aprobada">{{ formatQty(data.cantidad_aprobada) }}</span></template>
               </Column>
-              <Column header="Atend." header-class="columna-atendida" style="width: 88px">
+              <Column header="Atend." header-class="columna-atendida columna-numerica" body-class="columna-numerica" style="width: 8%">
                 <template #body="{ data }"><span class="resumen-cantidad resumen-cantidad--atendida">{{ formatQty(data.cantidad_atendida) }}</span></template>
               </Column>
-              <Column header="Fecha aprox" style="width: 190px">
+              <Column header="Estado" style="width: 16%">
+                <template #body="{ data }">
+                  <span v-tooltip.top="`Comentario: ${comentarioItem(data)}`"><EstadoTag :nombre="estadoActual(data)" size="sm" /></span>
+                </template>
+              </Column>
+              <Column header="Fecha aprox" style="width: 30%">
                 <template #body="{ data }">
                   <span class="resumen-fecha" :class="{ pendiente: !data.fecha_aprox_atencion }">
                     <i class="pi pi-calendar" aria-hidden="true"></i>{{ fechaAprox(data) }}
@@ -465,30 +568,30 @@ watch(
               v-if="secciones.incidencias && incidencias.length"
               :value="incidencias"
               class="resumen-tabla"
-              table-style="min-width: 780px"
+              table-style="width: 100%; table-layout: fixed"
             >
-              <Column header="Repuesto" style="width: 235px">
+              <Column header="Repuesto" style="width: 48%">
                 <template #body="{ data }">
                   <div class="repuesto-cell">
                     <i class="pi pi-box" aria-hidden="true"></i>
                     <div>
                       <span class="mono">{{ data.nro_parte || 'Sin nro. de parte' }}</span>
                       <span>{{ data.material || 'Sin descripción' }}</span>
+                      <span class="resumen-motivo"><strong>Motivo:</strong> {{ comentarioItem(data) }}</span>
                     </div>
                   </div>
                 </template>
               </Column>
-              <Column header="Solic." style="width: 88px">
+              <Column header="Solic." header-class="columna-numerica" body-class="columna-numerica" style="width: 12%">
                 <template #body="{ data }"><span class="resumen-cantidad">{{ formatQty(data.cantidad_solicitada) }}</span></template>
               </Column>
-              <Column header="Aprob." header-class="columna-aprobada" style="width: 88px">
+              <Column header="Aprob." header-class="columna-aprobada columna-numerica" body-class="columna-numerica" style="width: 12%">
                 <template #body="{ data }"><span class="resumen-cantidad resumen-cantidad--aprobada">{{ formatQty(data.cantidad_aprobada) }}</span></template>
               </Column>
-              <Column header="Estado" style="width: 125px">
-                <template #body="{ data }"><EstadoTag :nombre="data.estados_catalogo?.nombre" size="sm" /></template>
-              </Column>
-              <Column header="Motivo">
-                <template #body="{ data }"><span class="resumen-motivo">{{ comentarioIncidencia(data) }}</span></template>
+              <Column header="Estado" style="width: 28%">
+                <template #body="{ data }">
+                  <span v-tooltip.top="`Comentario: ${comentarioItem(data)}`"><EstadoTag :nombre="estadoActual(data)" size="sm" /></span>
+                </template>
               </Column>
             </DataTable>
             <div v-else-if="secciones.incidencias" class="resumen-vacio">
@@ -515,7 +618,8 @@ watch(
 
     <template #footer>
       <Button label="Cerrar" text severity="secondary" @click="emit('update:visible', false)" />
-      <Button label="Copiar resumen" icon="pi pi-copy" :disabled="loading || !texto" @click="copiarResumen" />
+      <Button label="Copiar texto" icon="pi pi-copy" text :disabled="loading || !texto" @click="copiarResumen" />
+      <Button label="Copiar correo con formato" icon="pi pi-envelope" :disabled="loading || !texto" @click="copiarCorreoConFormato" />
     </template>
   </Dialog>
 </template>
@@ -636,6 +740,15 @@ watch(
 
 .resumen-tabla :deep(.columna-aprobada) { color: #2f6f9f !important; }
 .resumen-tabla :deep(.columna-atendida) { color: #2f8b74 !important; }
+.resumen-tabla :deep(.columna-numerica) { text-align: center !important; }
+.resumen-tabla :deep(.p-datatable-wrapper) { overflow-x: hidden; }
+.resumen-tabla :deep(.p-datatable-table) { width: 100% !important; table-layout: fixed; }
+.resumen-tabla :deep(.p-datatable-thead > tr > th),
+.resumen-tabla :deep(.p-datatable-tbody > tr > td) {
+  padding: 8px 7px;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
 
 .resumen-fecha { gap: 6px; color: var(--text); font-size: 12.5px; white-space: nowrap; }
 .resumen-fecha i { color: var(--accent-500); font-size: 12px; }
@@ -643,7 +756,7 @@ watch(
 
 .resumen-motivo { display: block; max-width: 290px; color: var(--text); font-size: 12.5px; line-height: 1.4; white-space: normal; }
 
-.atencion-detalle-cell { display: flex; flex-direction: column; gap: 4px; color: var(--text); font-size: 12px; line-height: 1.35; }
+.atencion-detalle-cell { display: flex; flex-direction: column; gap: 4px; color: var(--text); font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
 .atencion-detalle-cell span { display: flex; align-items: flex-start; gap: 6px; }
 .atencion-detalle-cell i { margin-top: 2px; color: var(--atendido); font-size: 11px; }
 .atencion-detalle-vacio { color: var(--text-muted); font-style: italic; }

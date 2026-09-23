@@ -10,6 +10,7 @@ export const usePedidosStore = defineStore('pedidos', {
     loading: false,
     filtroEstado: null,
     busqueda: '',
+    busquedaItems: '',
   }),
 
   actions: {
@@ -38,6 +39,33 @@ export const usePedidosStore = defineStore('pedidos', {
       if (this.busqueda) {
         const term = this.busqueda.replace(/^sc/i, '')
         query = query.ilike('nro_sc', `%${term}%`)
+      }
+      if (this.busquedaItems.trim()) {
+        // La búsqueda se resuelve primero sobre los ítems activos y después
+        // se limita el listado de SC a los pedidos que los contienen.
+        const termino = this.busquedaItems
+          .trim()
+          .replace(/[(),]/g, ' ')
+
+        const { data: coincidencias, error: errorItems } = await supabase
+          .from('detalle_pedido')
+          .select('pedido_id')
+          .eq('active', true)
+          .or(`material.ilike.%${termino}%,nro_parte.ilike.%${termino}%`)
+
+        if (errorItems) {
+          this.loading = false
+          throw errorItems
+        }
+
+        const pedidoIds = [...new Set((coincidencias ?? []).map((item) => item.pedido_id))]
+        if (!pedidoIds.length) {
+          this.pedidos = []
+          this.total = 0
+          this.loading = false
+          return
+        }
+        query = query.in('pedido_id', pedidoIds)
       }
       const { data, error, count } = await query
         .order('fecha_emision', { ascending: false })

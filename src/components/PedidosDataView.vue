@@ -22,7 +22,7 @@ const first = ref(0)
 const rows = ref(12)
 
 watch(
-  () => `${pedidosStore.busqueda}|${pedidosStore.filtroEstado}|${filtroGlobalStore.grupoCosto}`,
+  () => `${pedidosStore.busqueda}|${pedidosStore.busquedaItems}|${pedidosStore.filtroEstado}|${filtroGlobalStore.grupoCosto}`,
   () => {
     first.value = 0
   },

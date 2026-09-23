@@ -33,6 +33,17 @@
       />
     </span>
 
+    <span class="p-input-icon-left page-search">
+      <i class="pi pi-box"></i>
+      <InputText
+        v-model="busquedaItems"
+        placeholder="Buscar ítem: descripción o N° parte"
+        fluid
+        @keydown.enter="buscar"
+        @keydown.esc="limpiarBusquedaItems"
+      />
+    </span>
+
     <Select
       v-model="filtroEstado"
       :options="estados"
@@ -44,6 +55,14 @@
       style="min-width: 200px"
     />
 
+    <Button
+      label="Restablecer filtros"
+      icon="pi pi-filter-slash"
+      severity="secondary"
+      outlined
+      :disabled="!hayFiltrosActivos"
+      @click="restablecerFiltros"
+    />
     <Button v-if="auth.canWrite" label="Compartir" icon="pi pi-link" text @click="dialogEnlacePublico = true" />
     <Button v-if="auth.canWrite" label="Nuevo pedido" icon="pi pi-plus" @click="abrirNuevo" />
   </div>
@@ -129,6 +148,15 @@ const filtroEstado = computed({
 })
 
 const busqueda = ref('')
+const busquedaItems = ref('')
+const hayFiltrosActivos = computed(() => Boolean(
+  busqueda.value.trim()
+  || busquedaItems.value.trim()
+  || pedidosStore.busqueda
+  || pedidosStore.busquedaItems
+  || pedidosStore.filtroEstado
+  || filtroGlobalStore.grupoCosto,
+))
 
 onMounted(async () => {
   if (!configurado) return
@@ -160,6 +188,7 @@ function notificarError(e) {
 
 function buscar() {
   pedidosStore.busqueda = busqueda.value
+  pedidosStore.busquedaItems = busquedaItems.value
   cargar().catch((e) => notificarError(e))
 }
 
@@ -167,6 +196,25 @@ function limpiarBusqueda() {
   busqueda.value = ''
   pedidosStore.busqueda = ''
   cargar().catch((e) => notificarError(e))
+}
+
+function limpiarBusquedaItems() {
+  busquedaItems.value = ''
+  pedidosStore.busquedaItems = ''
+  cargar().catch((e) => notificarError(e))
+}
+
+function restablecerFiltros() {
+  const teniaGrupoCosto = Boolean(filtroGlobalStore.grupoCosto)
+  busqueda.value = ''
+  busquedaItems.value = ''
+  pedidosStore.busqueda = ''
+  pedidosStore.busquedaItems = ''
+  pedidosStore.filtroEstado = null
+  filtroGlobalStore.establecerGrupoCosto(null)
+
+  // El watcher del grupo de costo recarga cuando había uno seleccionado.
+  if (!teniaGrupoCosto) cargar().catch((e) => notificarError(e))
 }
 
 function abrirNuevo() {
