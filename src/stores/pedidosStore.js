@@ -6,6 +6,8 @@ import { PENDIENTES_ATENCION } from '@/stores/estadosStore'
 export const usePedidosStore = defineStore('pedidos', {
   state: () => ({
     pedidos: [],
+    alertas: [],
+    itemsEstado: [],
     total: 0,
     loading: false,
     filtroEstado: null,
@@ -28,6 +30,7 @@ export const usePedidosStore = defineStore('pedidos', {
         .select('*', { count: 'exact' })
       if (this.filtroEstado === PENDIENTES_ATENCION) {
         query = query.in('estado_atencion', ['PENDIENTE', 'PARCIAL'])
+          .neq('estado_actual', 'Rechazado')
       } else if (this.filtroEstado) {
         query = query.eq('estado_actual', this.filtroEstado)
       }
@@ -70,10 +73,45 @@ export const usePedidosStore = defineStore('pedidos', {
       const { data, error, count } = await query
         .order('fecha_emision', { ascending: false })
         .order('pedido_id', { ascending: false })
-      this.loading = false
-      if (error) throw error
+      if (error) {
+        this.loading = false
+        throw error
+      }
       this.pedidos = data
       this.total = count
+
+      const pedidoIds = (data ?? []).map((pedido) => pedido.pedido_id)
+      if (!pedidoIds.length) {
+        this.alertas = []
+        this.itemsEstado = []
+        this.loading = false
+        return
+      }
+
+      const filtroAlertas = useFiltroGlobalStore()
+      const busquedaSc = this.busqueda.replace(/^sc/i, '').trim()
+      const [{ data: alertas, error: errorAlertas }, { data: itemsEstado, error: errorItems }] = await Promise.all([
+        supabase.rpc('fn_alertas_publicas_vigentes_con_equipo', {
+          p_busqueda_sc: busquedaSc || null,
+          p_busqueda_item: this.busquedaItems.trim() || null,
+          p_busqueda_equipo: null,
+          p_estado: this.filtroEstado && this.filtroEstado !== PENDIENTES_ATENCION ? this.filtroEstado : null,
+          p_grupo_costo: filtroAlertas.grupoCosto && filtroAlertas.grupoCosto !== SIN_GRUPO_COSTO
+            ? filtroAlertas.grupoCosto
+            : null,
+        }),
+        supabase.from('detalle_pedido')
+          .select('pedido_id, material, nro_parte, estados_catalogo:estado_actual_id(nombre)')
+          .eq('active', true)
+          .in('pedido_id', pedidoIds),
+      ])
+
+      const pedidosVisibles = new Set(pedidoIds.map(Number))
+      this.alertas = errorAlertas
+        ? []
+        : (alertas ?? []).filter((alerta) => pedidosVisibles.has(Number(alerta.pedido_id)))
+      this.itemsEstado = errorItems ? [] : (itemsEstado ?? [])
+      this.loading = false
     },
 
     async buscarPedidoPorNroSc(nroSc) {

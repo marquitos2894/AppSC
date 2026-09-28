@@ -963,6 +963,28 @@ body {
   justify-content: flex-end;
 }
 
+.pedido-status-alertas {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-width: 310px;
+}
+
+.pedido-status-alertas .p-tag {
+  gap: 5px;
+  padding: 3px 7px;
+  font-size: 10.5px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.pedido-card-grid-foot .pedido-status-alertas {
+  justify-content: flex-start;
+  max-width: 100%;
+}
+
 .dataview-list-skeleton {
   border-top: 1px solid var(--line);
 }

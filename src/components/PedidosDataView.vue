@@ -36,10 +36,6 @@ function contador(items) {
   return formatQty(items)
 }
 
-function hayExcepciones(pedido) {
-  return pedido.items_observados > 0 || pedido.items_rechazados > 0
-}
-
 function claseAtencionPedido(valor) {
   return { PENDIENTE: 'sin-atender', PARCIAL: 'parcial', COMPLETO: 'completa' }[valor] || ''
 }
@@ -50,6 +46,39 @@ function etiquetaAtencionPedido(valor) {
 
 function etiquetaGrupoCosto(pedido) {
   return pedido.grupo_costo || 'Sin grupo de costo'
+}
+
+function alertasPedido(pedido, tipo) {
+  return pedidosStore.alertas.filter((alerta) =>
+    Number(alerta.pedido_id) === Number(pedido.pedido_id) && (!tipo || alerta.tipo === tipo),
+  )
+}
+
+function cantidadItemsAtendidos(pedido) {
+  return pedidosStore.itemsEstado.filter((item) =>
+    Number(item.pedido_id) === Number(pedido.pedido_id)
+      && item.estados_catalogo?.nombre === 'Atendido',
+  ).length
+}
+
+function etiquetaVenceHoy(pedido) {
+  const cantidad = alertasPedido(pedido, 'vence_hoy').length
+  return cantidad > 1 ? `Vence hoy · ${cantidad}` : 'Vence hoy'
+}
+
+function etiquetaRetraso(pedido) {
+  const maxDias = Math.max(...alertasPedido(pedido, 'retraso').map((alerta) => Number(alerta.dias_retraso) || 0))
+  return `${maxDias} día${maxDias === 1 ? '' : 's'} de retraso`
+}
+
+function tooltipExcepcion(pedido, tipo) {
+  const coincidencias = alertasPedido(pedido, tipo)
+  const items = [...new Set(coincidencias.map((alerta) => alerta.material || alerta.nro_parte).filter(Boolean))]
+  const titulo = tipo === 'observado' ? 'Ítems observados' : 'Ítems rechazados'
+  if (!items.length) return `${titulo}: ${tipo === 'observado' ? pedido.items_observados : pedido.items_rechazados}`
+  const visibles = items.slice(0, 8)
+  if (items.length > visibles.length) visibles.push(`+${items.length - visibles.length} más`)
+  return `${titulo}:\n${visibles.join('\n')}`
 }
 
 function puedeCambiarEstado(pedido) {
@@ -164,14 +193,12 @@ function abrirCambioEstado(evento, pedido) {
               {{ contador(pedido.total_items) }}
             </span>
 
-            <div class="pedido-row-excepciones">
-              <span v-if="pedido.items_observados > 0" class="counter-badge observado">
-                {{ contador(pedido.items_observados) }} obs
-              </span>
-              <span v-if="pedido.items_rechazados > 0" class="counter-badge rechazado">
-                {{ contador(pedido.items_rechazados) }} rech
-              </span>
-              <span v-if="!hayExcepciones(pedido)" class="counter-badge none">—</span>
+            <div class="pedido-status-alertas">
+              <Tag v-if="alertasPedido(pedido, 'vence_hoy').length" :value="etiquetaVenceHoy(pedido)" icon="pi pi-clock" severity="warn" />
+              <Tag v-if="alertasPedido(pedido, 'retraso').length" :value="etiquetaRetraso(pedido)" icon="pi pi-exclamation-circle" severity="danger" />
+              <Tag v-if="pedido.items_observados > 0" :value="`Observados · ${contador(pedido.items_observados)}`" icon="pi pi-eye" severity="warn" v-tooltip.top="tooltipExcepcion(pedido, 'observado')" />
+              <Tag v-if="pedido.items_rechazados > 0" :value="`Rechazados · ${contador(pedido.items_rechazados)}`" icon="pi pi-ban" severity="danger" v-tooltip.top="tooltipExcepcion(pedido, 'rechazado')" />
+              <Tag v-if="cantidadItemsAtendidos(pedido) > 0" :value="`Atendidos · ${contador(cantidadItemsAtendidos(pedido))}`" icon="pi pi-check" severity="success" />
             </div>
 
             <div class="item-acciones">
@@ -266,14 +293,12 @@ function abrirCambioEstado(evento, pedido) {
             </span>
 
             <div class="pedido-card-grid-foot">
-              <div class="pedido-row-excepciones">
-                <span v-if="pedido.items_observados > 0" class="counter-badge observado">
-                  {{ contador(pedido.items_observados) }} obs
-                </span>
-                <span v-if="pedido.items_rechazados > 0" class="counter-badge rechazado">
-                  {{ contador(pedido.items_rechazados) }} rech
-                </span>
-                <span v-if="!hayExcepciones(pedido)" class="counter-badge none">—</span>
+              <div class="pedido-status-alertas">
+                <Tag v-if="alertasPedido(pedido, 'vence_hoy').length" :value="etiquetaVenceHoy(pedido)" icon="pi pi-clock" severity="warn" />
+                <Tag v-if="alertasPedido(pedido, 'retraso').length" :value="etiquetaRetraso(pedido)" icon="pi pi-exclamation-circle" severity="danger" />
+                <Tag v-if="pedido.items_observados > 0" :value="`Observados · ${contador(pedido.items_observados)}`" icon="pi pi-eye" severity="warn" v-tooltip.top="tooltipExcepcion(pedido, 'observado')" />
+                <Tag v-if="pedido.items_rechazados > 0" :value="`Rechazados · ${contador(pedido.items_rechazados)}`" icon="pi pi-ban" severity="danger" v-tooltip.top="tooltipExcepcion(pedido, 'rechazado')" />
+                <Tag v-if="cantidadItemsAtendidos(pedido) > 0" :value="`Atendidos · ${contador(cantidadItemsAtendidos(pedido))}`" icon="pi pi-check" severity="success" />
               </div>
 
               <div class="item-acciones">

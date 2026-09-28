@@ -228,16 +228,12 @@ function limpiarBusquedaItems() {
 }
 
 function restablecerFiltros() {
-  const teniaGrupoCosto = Boolean(filtroGlobalStore.grupoCosto)
   busqueda.value = ''
   busquedaItems.value = ''
   pedidosStore.busqueda = ''
   pedidosStore.busquedaItems = ''
   pedidosStore.filtroEstado = null
-  filtroGlobalStore.establecerGrupoCosto(null)
-
-  // El watcher del grupo de costo recarga cuando había uno seleccionado.
-  if (!teniaGrupoCosto) cargar().catch((e) => notificarError(e))
+  cargar().catch((e) => notificarError(e))
 }
 
 function abrirNuevo() {

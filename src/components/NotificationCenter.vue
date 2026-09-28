@@ -36,7 +36,7 @@ async function cargar() {
   errorCentro.value = ''
   try {
     const [{ data, error }, { data: count, error: countError }] = await Promise.all([
-      supabase.rpc('fn_listar_notificaciones', { p_solo_no_leidas: soloNoLeidas.value, p_limite: 100 }),
+      supabase.rpc('fn_listar_notificaciones_con_equipo', { p_solo_no_leidas: soloNoLeidas.value, p_limite: 100 }),
       supabase.rpc('fn_contar_notificaciones_no_leidas'),
     ])
     if (error) throw error
@@ -187,7 +187,10 @@ onBeforeUnmount(() => {
       </div>
     </Message>
     <Message v-else-if="pushDisponible" severity="secondary" :closable="false" class="push-banner">
-      Las notificaciones dentro de AppSC están activas. Falta configurar la clave pública para activar avisos con la app cerrada.
+      <div class="push-setup-copy">
+        <strong>Las notificaciones dentro de AppSC funcionan.</strong>
+        <span>Para recibir avisos con la app cerrada faltan <code>VITE_PUSH_PUBLIC_KEY</code> y el despachador de Supabase con sus claves VAPID.</span>
+      </div>
     </Message>
     <Message v-if="pushError" severity="warn" :closable="false" class="push-banner">{{ pushError }}</Message>
     <Message v-if="errorCentro" severity="error" :closable="false">{{ errorCentro }}</Message>
@@ -204,11 +207,14 @@ onBeforeUnmount(() => {
             <Tag :value="evento.etiqueta_tipo || evento.tipo" :severity="severidad(evento.tipo)" />
             <span class="notification-date">{{ fechaCorta(evento.creado_en) }}</span>
           </div>
-          <strong>{{ evento.titulo }}</strong>
-          <span>{{ evento.mensaje }}</span>
-          <small v-if="evento.nro_sc">SC{{ evento.nro_sc }}<template v-if="evento.material"> · {{ evento.material }}</template></small>
-          <small v-if="evento.dias_retraso !== null && evento.dias_retraso !== undefined">{{ evento.dias_retraso }} días de retraso</small>
-          <small v-if="evento.estado_actual">Estado: {{ evento.estado_actual }}</small>
+          <div v-if="evento.nro_sc || evento.equipo" class="notification-context">
+            <strong v-if="evento.nro_sc" class="notification-sc">SC{{ evento.nro_sc }}</strong>
+            <span v-if="evento.equipo" class="notification-equipo"><i class="pi pi-sitemap" aria-hidden="true"></i>{{ evento.equipo }}</span>
+          </div>
+          <strong class="notification-title">{{ evento.titulo }}</strong>
+          <small v-if="evento.estado_actual" class="notification-detail">Estado · {{ evento.estado_actual }}</small>
+          <small v-else-if="evento.dias_retraso !== null && evento.dias_retraso !== undefined" class="notification-detail">{{ evento.dias_retraso }} días de retraso</small>
+          <small v-else-if="!evento.equipo" class="notification-detail">{{ evento.mensaje }}</small>
         </button>
         <Button v-if="!evento.leido" icon="pi pi-check" text rounded size="small" aria-label="Marcar como leída" @click="marcarLeida(evento)" />
       </li>
@@ -222,6 +228,9 @@ onBeforeUnmount(() => {
 .notification-tools { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
 .push-banner { margin-bottom: 14px; }
 .push-banner-content { display: grid; gap: 6px; }
+.push-setup-copy { display: grid; gap: 4px; }
+.push-setup-copy span { font-size: 12px; line-height: 1.45; }
+.push-setup-copy code { font-size: 11px; }
 .notification-empty { display: grid; justify-items: center; gap: 10px; padding: 42px 16px; color: var(--text-muted); text-align: center; }
 .notification-empty i { font-size: 26px; }
 .notification-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
@@ -229,7 +238,12 @@ onBeforeUnmount(() => {
 .notification-list li.unread { border-color: #a8c6da; background: #f4f9fc; }
 .notification-item { display: grid; flex: 1; gap: 6px; min-width: 0; padding: 0; color: inherit; border: 0; background: transparent; text-align: left; cursor: pointer; }
 .notification-item-head { display: flex; justify-content: space-between; gap: 6px; }
-.notification-item strong { color: var(--ink-900); font-size: 13px; }
-.notification-item span, .notification-item small { color: var(--text-muted); font-size: 12px; line-height: 1.4; }
+.notification-context { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 2px 0; }
+.notification-sc { color: var(--ink-900); font-size: 15px; font-variant-numeric: tabular-nums; }
+.notification-equipo { display: inline-flex; align-items: center; gap: 5px; color: #315b76; font-size: 12px; font-weight: 600; }
+.notification-equipo i { font-size: 10px; }
+.notification-title { color: var(--ink-900); font-size: 12px; font-weight: 600; }
+.notification-detail { color: var(--text-muted); font-size: 11px; line-height: 1.4; }
+.notification-date { color: var(--text-muted); font-size: 11px; }
 .notification-date { white-space: nowrap; }
 </style>

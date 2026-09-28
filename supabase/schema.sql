@@ -170,8 +170,9 @@ end;
 -- Recalcula el estado del encabezado a partir de los ítems activos.
 -- Regla 1: si TODOS los ítems son excepción -> Rechazado (todos rechazados)
 --          u Observado (mezcla o todos observados).
--- Regla 2: si quedan ítems en flujo normal -> estado con mayor `orden`
---          entre los ítems no-excepción (el ítem más avanzado marca la fase).
+-- Regla 2: si quedan ítems en flujo normal, se muestra el estado no terminal
+--          más avanzado. Atendido solo se muestra cuando no quedan ítems
+--          normales por procesar; es un estado derivado, no un máximo de etapa.
 -- Inserta fila en solicitud_historial_estados solo si el resultado cambia.
 create or replace function fn_recalcular_pedido_estado(p_pedido_id bigint)
 returns void
@@ -212,15 +213,27 @@ begin
       select estado_id into v_nuevo_estado from estados_catalogo where nombre = 'Observado';
     end if;
   else
-    -- Regla 2: mayor orden entre ítems no-excepción
+    -- Atendido no debe ocultar otros ítems que aún siguen en proceso.
     select d.estado_actual_id into v_nuevo_estado
     from detalle_pedido d
     join estados_catalogo ec on ec.estado_id = d.estado_actual_id
     where d.pedido_id = p_pedido_id
       and d.active
       and not ec.es_excepcion
+      and ec.nombre <> 'Atendido'
     order by ec.orden desc nulls last
     limit 1;
+
+    if v_nuevo_estado is null then
+      select d.estado_actual_id into v_nuevo_estado
+      from detalle_pedido d
+      join estados_catalogo ec on ec.estado_id = d.estado_actual_id
+      where d.pedido_id = p_pedido_id
+        and d.active
+        and not ec.es_excepcion
+      order by ec.orden desc nulls last
+      limit 1;
+    end if;
   end if;
 
   select estado_actual_id into v_actual_estado from pedido where pedido_id = p_pedido_id;
@@ -234,29 +247,33 @@ end;
 $$;
 
 -- Recalcula la atención agregada del pedido (pedido.estado_atencion):
---   PENDIENTE -> ningún ítem atendido
---   PARCIAL   -> al menos un ítem atendido y quedan pendientes
---   COMPLETO  -> ningún ítem pendiente (aprobada - atendida <= 0)
---   NULL      -> sin ítems activos
+--   PENDIENTE -> no hay ítems atendidos y queda algún ítem normal por procesar
+--   PARCIAL   -> hay ítems atendidos y también ítems normales por procesar
+--   COMPLETO  -> los ítems normales activos están atendidos, sin saldo
+--   NULL      -> no hay ítems normales activos (p. ej. todos son excepciones)
 create or replace function fn_recalcular_pedido_atencion(p_pedido_id bigint)
 returns void
 language plpgsql
 as $$
 declare
-  v_activos    int;
+  v_normales   int;
   v_atendidos  int;
   v_pendientes int;
   v_atencion   varchar(30);
 begin
   select
-    count(*) filter (where d.active),
-    count(*) filter (where d.active and d.cantidad_atendida > 0),
-    count(*) filter (where d.active and (coalesce(d.cantidad_aprobada, 0) - coalesce(d.cantidad_atendida, 0)) > 0)
-    into v_activos, v_atendidos, v_pendientes
+    count(*) filter (where d.active and not ec.es_excepcion),
+    count(*) filter (where d.active and not ec.es_excepcion and d.cantidad_atendida > 0),
+    count(*) filter (where d.active and not ec.es_excepcion and (
+      ec.nombre <> 'Atendido'
+      or (coalesce(d.cantidad_aprobada, 0) - coalesce(d.cantidad_atendida, 0)) > 0
+    ))
+    into v_normales, v_atendidos, v_pendientes
   from detalle_pedido d
+  join estados_catalogo ec on ec.estado_id = d.estado_actual_id
   where d.pedido_id = p_pedido_id;
 
-  if v_activos = 0 then
+  if v_normales = 0 then
     v_atencion := null;
   elsif v_atendidos = 0 then
     v_atencion := 'PENDIENTE';
