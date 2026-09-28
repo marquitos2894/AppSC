@@ -1,12 +1,13 @@
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { isConfigured } from '@/api/supabaseClient'
 import { useAuthStore } from '@/stores/authStore'
 import { useToast } from 'primevue/usetoast'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const toast = useToast()
 
@@ -28,7 +29,8 @@ async function entrar() {
       detail: `Bienvenido, ${authStore.email}`,
       life: 3000,
     })
-    router.push({ name: 'pedidos' })
+    const destino = String(route.query.redirect || '')
+    router.push(destino.startsWith('/') && !destino.startsWith('//') ? destino : { name: 'pedidos' })
   } catch {
     // error mostrado inline en authStore.error
   } finally {

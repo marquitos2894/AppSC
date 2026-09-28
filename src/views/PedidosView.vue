@@ -102,6 +102,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import { useRoute, useRouter } from 'vue-router'
 import { isConfigured } from '@/api/supabaseClient'
 import { useEstadosStore } from '@/stores/estadosStore'
 import { usePedidosStore } from '@/stores/pedidosStore'
@@ -125,6 +126,8 @@ const filtroGlobalStore = useFiltroGlobalStore()
 const auth = useAuthStore()
 const confirm = useConfirm()
 const toast = useToast()
+const route = useRoute()
+const router = useRouter()
 
 const { filtrosEstado: estados, loading: cargandoEstados } = storeToRefs(estadosStore)
 const { total } = storeToRefs(pedidosStore)
@@ -167,6 +170,26 @@ onMounted(async () => {
     notificarError(e)
   }
 })
+
+watch(
+  () => route.query.pedido,
+  async (pedidoId) => {
+    if (!pedidoId || !configurado) return
+    try {
+      const id = Number(pedidoId)
+      if (!pedidosStore.pedidos.some((pedido) => Number(pedido.pedido_id) === id)) {
+        await pedidosStore.fetchPedidos()
+      }
+      detalleStore.abrir(id)
+      const query = { ...route.query }
+      delete query.pedido
+      router.replace({ name: 'pedidos', query })
+    } catch (e) {
+      notificarError(e)
+    }
+  },
+  { immediate: true },
+)
 
 watch(
   () => filtroGlobalStore.grupoCosto,

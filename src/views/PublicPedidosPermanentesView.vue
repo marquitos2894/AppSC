@@ -5,6 +5,8 @@ import { formatDate, formatQty } from '@/utils/format'
 import PedidoResumenDialog from '@/components/PedidoResumenDialog.vue'
 
 const pedidos = ref([])
+const alertas = ref([])
+const errorAlertas = ref('')
 const loading = ref(true)
 const error = ref('')
 const resumenVisible = ref(false)
@@ -49,17 +51,26 @@ async function cargar({ reiniciar = false } = {}) {
   if (reiniciar) first.value = 0
   loading.value = true
   error.value = ''
+  errorAlertas.value = ''
   try {
-    const { data, error: rpcError } = await supabase.rpc('fn_listar_pedidos_publicos_paginado', {
+    const filtros = {
       p_busqueda_sc: busquedaSc.value.trim() || null,
       p_busqueda_item: busquedaItem.value.trim() || null,
       p_estado: estado.value || null,
       p_grupo_costo: grupoCosto.value || null,
-      p_pagina: Math.floor(first.value / rows.value) + 1,
-      p_por_pagina: rows.value,
-    })
+    }
+    const [{ data, error: rpcError }, { data: datosAlertas, error: rpcErrorAlertas }] = await Promise.all([
+      supabase.rpc('fn_listar_pedidos_publicos_paginado', {
+        ...filtros,
+        p_pagina: Math.floor(first.value / rows.value) + 1,
+        p_por_pagina: rows.value,
+      }),
+      supabase.rpc('fn_alertas_publicas_vigentes', filtros),
+    ])
     if (rpcError) throw rpcError
     pedidos.value = data ?? []
+    alertas.value = rpcErrorAlertas ? [] : (datosAlertas ?? [])
+    if (rpcErrorAlertas) errorAlertas.value = 'Las alertas no están disponibles temporalmente.'
     total.value = Number(data?.[0]?.total_registros ?? 0)
   } catch (e) {
     pedidos.value = []
@@ -90,6 +101,17 @@ async function abrirResumen(pedido) {
   } finally {
     loadingDetalle.value = false
   }
+}
+
+function alertasPedido(pedidoId) {
+  return alertas.value.filter((alerta) => Number(alerta.pedido_id) === Number(pedidoId))
+}
+
+function etiquetaAlerta(alerta) {
+  if (alerta.tipo === 'vence_hoy') return 'Vence hoy'
+  if (alerta.tipo === 'retraso') return `${alerta.dias_retraso} día${alerta.dias_retraso === 1 ? '' : 's'} de retraso`
+  if (alerta.tipo === 'sin_fecha') return 'Sin fecha'
+  return alerta.tipo === 'observado' ? 'Observado' : 'Rechazado'
 }
 
 function restablecerFiltros() {
@@ -148,8 +170,26 @@ onMounted(async () => {
     </section>
 
     <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+    <Message v-if="errorAlertas && !error" severity="warn" :closable="false">{{ errorAlertas }}</Message>
 
-    <template v-else>
+    <section v-if="!loading && !error && !errorAlertas" class="public-alerts" aria-label="Alertas vigentes">
+      <div class="public-alerts-title">
+        <div><i class="pi pi-bell"></i><strong>Alertas vigentes</strong></div>
+        <span>{{ alertas.length }} ítem{{ alertas.length === 1 ? '' : 's' }}</span>
+      </div>
+      <div v-if="alertas.length" class="public-alerts-list">
+        <article v-for="alerta in alertas" :key="`${alerta.detalle_id}-${alerta.tipo}`" class="public-alert-row">
+          <Tag :value="etiquetaAlerta(alerta)" :severity="alerta.tipo === 'rechazado' || alerta.tipo === 'retraso' || alerta.tipo === 'sin_fecha' ? 'danger' : 'warn'" />
+          <strong>SC{{ alerta.nro_sc }}</strong>
+          <span>{{ alerta.material || alerta.nro_parte || 'Ítem' }}</span>
+          <span class="public-alert-state">{{ alerta.estado_actual }}</span>
+          <span v-if="alerta.fecha_aprox_atencion">Fecha: {{ formatDate(alerta.fecha_aprox_atencion) }}</span>
+        </article>
+      </div>
+      <p v-else class="public-no-alerts">No hay alertas vigentes con estos filtros.</p>
+    </section>
+
+    <template v-if="!error">
       <div v-if="loading" class="public-grid">
         <Skeleton v-for="n in 8" :key="n" height="170px" />
       </div>
@@ -166,6 +206,16 @@ onMounted(async () => {
               <span><i class="pi pi-calendar"></i> {{ formatDate(pedido.fecha_emision) }}</span>
               <span><i class="pi pi-list"></i> {{ formatQty(pedido.total_items) }} ítems</span>
               <span><i class="pi pi-box"></i> {{ etiquetaAtencion(pedido.estado_atencion) }}</span>
+            </div>
+            <div v-if="alertasPedido(pedido.pedido_id).length" class="public-card-alerts">
+              <Tag
+                v-for="alerta in alertasPedido(pedido.pedido_id).slice(0, 3)"
+                :key="`${alerta.detalle_id}-${alerta.tipo}`"
+                :value="etiquetaAlerta(alerta)"
+                :severity="alerta.tipo === 'rechazado' || alerta.tipo === 'retraso' || alerta.tipo === 'sin_fecha' ? 'danger' : 'warn'"
+                v-tooltip.top="`${alerta.material || alerta.nro_parte || 'Ítem'} · ${alerta.estado_actual}`"
+              />
+              <Tag v-if="alertasPedido(pedido.pedido_id).length > 3" :value="`+${alertasPedido(pedido.pedido_id).length - 3}`" severity="secondary" />
             </div>
             <div class="public-card-foot">
               <span v-if="pedido.grupo_costo" class="public-group">{{ pedido.grupo_costo }}</span>
@@ -200,12 +250,22 @@ h1 { margin: 12px 0 4px; color: #1e2a38; font-size: clamp(24px, 4vw, 34px); }
 .public-filtros :deep(.p-inputtext), .public-filtros :deep(.p-select) { width: 100%; }
 .public-filtros > :deep(.p-select) { flex: 1 1 180px; }
 .public-total { max-width: 1360px; margin: 0 auto 12px; font-size: 13px; }
+.public-alerts { max-width: 1360px; margin: 0 auto 18px; padding: 14px; border: 1px solid #dce6ec; border-radius: 12px; background: white; }
+.public-alerts-title { display: flex; justify-content: space-between; align-items: center; color: #475569; font-size: 12px; }
+.public-alerts-title > div { display: flex; align-items: center; gap: 8px; color: #1e2a38; font-size: 14px; }
+.public-alerts-title i { color: #e8a33d; }
+.public-alerts-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 7px; margin-top: 10px; }
+.public-alert-row { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 8px; border-radius: 8px; background: #f7f9fb; color: #64748b; font-size: 11px; }
+.public-alert-row strong { color: #315b76; }
+.public-alert-state { font-weight: 600; }
+.public-no-alerts { margin: 12px 0 2px; color: #718096; font-size: 12px; }
 .public-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; max-width: 1360px; margin: 0 auto; }
 .public-card { min-height: 170px; padding: 16px; border: 1px solid #dce6ec; border-radius: 12px; background: white; text-align: left; }
 .public-card-head, .public-card-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: #1e2a38; }
 .public-card p { min-height: 38px; margin: 12px 0; color: #475569; font-size: 13px; line-height: 1.45; }
 .public-card-meta { display: flex; flex-wrap: wrap; gap: 8px 12px; color: #64748b; font-size: 12px; }
 .public-card-meta i { margin-right: 4px; color: #3b6e8f; }
+.public-card-alerts { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
 .public-card-foot { margin-top: 10px; }
 .public-group { color: #315b76; font-size: 11px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .public-empty { display: grid; place-items: center; gap: 8px; min-height: 220px; color: #718096; }

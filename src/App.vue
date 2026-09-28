@@ -5,6 +5,7 @@ import { RouterView, RouterLink, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useDetallePedidoStore } from '@/stores/detallePedidoStore'
 import { useFiltroGlobalStore } from '@/stores/filtroGlobalStore'
+import NotificationCenter from '@/components/NotificationCenter.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -31,7 +32,7 @@ watch(
       filtroGlobalStore.limpiar()
     }
     if (!authed && router.currentRoute.value.meta.requiresAuth) {
-      router.push({ name: 'login' })
+      router.push({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } })
     }
   },
   { immediate: true },
@@ -150,6 +151,7 @@ async function salir() {
             :disabled="!grupoCosto"
             @click="restablecerGrupoCosto"
           />
+          <NotificationCenter />
           <Tag v-if="auth.isReadOnly" value="Modo lectura" icon="pi pi-eye" severity="info" />
         </div>
         <RouterView />
